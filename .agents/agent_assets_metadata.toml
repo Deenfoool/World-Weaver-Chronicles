@@ -1,0 +1,44 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "RwYWm5Adr0YYqy2bKcBCc"
+uri = "file://client/public/images/town-hub.png"
+type = "image"
+title = "Medieval town hub"
+
+[[generated]]
+id = "L6amzqe5NVUwhcJ9FDbzH"
+uri = "file://client/public/images/dark-forest.png"
+type = "image"
+title = "Dark gloomy forest"
+
+[[generated]]
+id = "I9VN-pD6RTOYWIA4qRzyf"
+uri = "file://client/public/images/old-road.png"
+type = "image"
+title = "Old dirt road"
+
+[[generated]]
+id = "lyi4R_pton4RgqkNHrhRf"
+uri = "file://client/public/images/ruined-castle.png"
+type = "image"
+title = "Ruined stone castle"
+
+[[generated]]
+id = "NACL_MKBDKv1DLqSGFh7c"
+uri = "file://client/public/images/mountain-pass.png"
+type = "image"
+title = "Dark mountain pass"
+
+[[generated]]
+id = "lTtFqMAQJHFcuU6Uvm9XI"
+uri = "file://client/public/images/cave.png"
+type = "image"
+title = "Spooky cave entrance"
+
+[[generated]]
+id = "ZTiVZp2EAFk17NEJyP79_"
+uri = "file://client/public/images/swamp.png"
+type = "image"
+title = "Murky swamp"

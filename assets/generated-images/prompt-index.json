@@ -1,0 +1,239 @@
+{
+  "locations": [
+    {
+      "key": "town_oakhaven",
+      "id": "town_oakhaven",
+      "en": "Oakhaven",
+      "ru": "Окхейвен",
+      "enDesc": "A bustling trading hub.",
+      "ruDesc": "Оживленный торговый центр."
+    },
+    {
+      "key": "road_south",
+      "id": "road_south",
+      "en": "South Road",
+      "ru": "Южная дорога",
+      "enDesc": "Main route, lately unsafe.",
+      "ruDesc": "Главный путь, в последнее время небезопасен."
+    },
+    {
+      "key": "forest_whispering",
+      "id": "forest_whispering",
+      "en": "Whispering Forest",
+      "ru": "Шепчущий лес",
+      "enDesc": "Dark trees and old hunting paths.",
+      "ruDesc": "Темные деревья и старые тропы."
+    },
+    {
+      "key": "ruins_ancient",
+      "id": "ruins_ancient",
+      "en": "Ancient Ruins",
+      "ru": "Древние руины",
+      "enDesc": "Crumbling towers of forgotten age.",
+      "ruDesc": "Разрушающиеся башни забытой эпохи."
+    },
+    {
+      "key": "mountain_pass",
+      "id": "mountain_pass",
+      "en": "Troll Pass",
+      "ru": "Перевал троллей",
+      "enDesc": "Treacherous mountain path.",
+      "ruDesc": "Коварная горная тропа."
+    },
+    {
+      "key": "cave_deep",
+      "id": "cave_deep",
+      "en": "Echoing Cave",
+      "ru": "Эхо-пещера",
+      "enDesc": "Damp caves with crystals.",
+      "ruDesc": "Сырые пещеры с кристаллами."
+    },
+    {
+      "key": "swamp_murky",
+      "id": "swamp_murky",
+      "en": "Murky Swamp",
+      "ru": "Мрачное болото",
+      "enDesc": "Green fog and dead trees.",
+      "ruDesc": "Зеленый туман и мертвые деревья."
+    },
+    {
+      "key": "forgotten_forge",
+      "id": "forgotten_forge",
+      "en": "Forgotten Forge",
+      "ru": "Забытая кузня",
+      "enDesc": "Ancient forge still warm.",
+      "ruDesc": "Древняя кузня, еще теплая."
+    },
+    {
+      "key": "sunken_sanctum",
+      "id": "sunken_sanctum",
+      "en": "Sunken Sanctum",
+      "ru": "Затонувшее святилище",
+      "enDesc": "Flooded shrine of arcane glyphs.",
+      "ruDesc": "Затопленное святилище тайных рун."
+    }
+  ],
+  "npcs": [
+    {
+      "key": "npc_elder_bran",
+      "id": "npc_elder_bran",
+      "en": "Elder Bran",
+      "ru": "Старейшина Бран",
+      "locationId": "town_oakhaven"
+    },
+    {
+      "key": "npc_guard_tom",
+      "id": "npc_guard_tom",
+      "en": "Guard Tom",
+      "ru": "Стражник Том",
+      "locationId": "town_oakhaven"
+    },
+    {
+      "key": "npc_alchemist_mira",
+      "id": "npc_alchemist_mira",
+      "en": "Mira the Alchemist",
+      "ru": "Алхимик Мира",
+      "locationId": "town_oakhaven"
+    },
+    {
+      "key": "npc_scout_lyra",
+      "id": "npc_scout_lyra",
+      "en": "Scout Lyra",
+      "ru": "Разведчица Лира",
+      "locationId": "town_oakhaven"
+    },
+    {
+      "key": "npc_blacksmith_durn",
+      "id": "npc_blacksmith_durn",
+      "en": "Blacksmith Durn",
+      "ru": "Кузнец Дурн",
+      "locationId": "town_oakhaven"
+    },
+    {
+      "key": "npc_chronicler_vesna",
+      "id": "npc_chronicler_vesna",
+      "en": "Chronicler Vesna",
+      "ru": "Летописец Весна",
+      "locationId": "town_oakhaven"
+    }
+  ],
+  "enemies": [
+    {
+      "key": "wolf",
+      "id": "wolf",
+      "en": "Rabid Wolf",
+      "ru": "Бешеный волк",
+      "role": "berserker",
+      "level": 1,
+      "damageType": "physical"
+    },
+    {
+      "key": "bandit",
+      "id": "bandit",
+      "en": "Highway Bandit",
+      "ru": "Разбойник с большой дороги",
+      "role": "berserker",
+      "level": 2,
+      "damageType": "physical"
+    },
+    {
+      "key": "goblin",
+      "id": "goblin",
+      "en": "Scavenger Goblin",
+      "ru": "Гоблин-мусорщик",
+      "role": "alchemist",
+      "level": 2,
+      "damageType": "physical"
+    },
+    {
+      "key": "troll",
+      "id": "troll",
+      "en": "Cave Troll",
+      "ru": "Пещерный тролль",
+      "role": "tank",
+      "level": 4,
+      "damageType": "physical"
+    },
+    {
+      "key": "swamp_thing",
+      "id": "swamp_thing",
+      "en": "Bog Horror",
+      "ru": "Болотный ужас",
+      "role": "tank",
+      "level": 3,
+      "damageType": "poison"
+    },
+    {
+      "key": "plague_alchemist",
+      "id": "plague_alchemist",
+      "en": "Plague Alchemist",
+      "ru": "Чумной алхимик",
+      "role": "alchemist",
+      "level": 6,
+      "damageType": "poison"
+    },
+    {
+      "key": "sentinel_golem",
+      "id": "sentinel_golem",
+      "en": "Sentinel Golem",
+      "ru": "Голем-страж",
+      "role": "boss",
+      "level": 8,
+      "damageType": "physical"
+    },
+    {
+      "key": "frost_wolf",
+      "id": "frost_wolf",
+      "en": "Frost Wolf",
+      "ru": "Ледяной волк",
+      "role": "berserker",
+      "level": 4,
+      "damageType": "frost"
+    },
+    {
+      "key": "ash_bandit",
+      "id": "ash_bandit",
+      "en": "Ashroad Raider",
+      "ru": "Пепельный налетчик",
+      "role": "berserker",
+      "level": 5,
+      "damageType": "fire"
+    },
+    {
+      "key": "crystal_wisp",
+      "id": "crystal_wisp",
+      "en": "Crystal Wisp",
+      "ru": "Кристальный огонек",
+      "role": "alchemist",
+      "level": 4,
+      "damageType": "arcane"
+    },
+    {
+      "key": "ruin_knight",
+      "id": "ruin_knight",
+      "en": "Ruin Knight",
+      "ru": "Руинный рыцарь",
+      "role": "tank",
+      "level": 6,
+      "damageType": "physical"
+    },
+    {
+      "key": "mire_siren",
+      "id": "mire_siren",
+      "en": "Mire Siren",
+      "ru": "Болотная сирена",
+      "role": "alchemist",
+      "level": 6,
+      "damageType": "poison"
+    },
+    {
+      "key": "stone_revenant",
+      "id": "stone_revenant",
+      "en": "Stone Revenant",
+      "ru": "Каменный ревенант",
+      "role": "boss",
+      "level": 9,
+      "damageType": "physical"
+    }
+  ]
+}

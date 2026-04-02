@@ -1,0 +1,317 @@
+export type WeatherType = "clear" | "rain" | "fog" | "storm" | "snow";
+export type DamageType = "physical" | "poison" | "fire" | "frost" | "arcane";
+export type StatusEffectType = "bleeding" | "poisoned" | "stunned";
+export type ItemRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
+export type EnemyRole = "tank" | "berserker" | "alchemist" | "boss";
+export type SkillBranch = "warfare" | "survival" | "alchemy" | "tactics";
+export type PlayerClassId = "wanderer" | "guardian" | "slayer" | "arcanist" | "warrior" | "ranger" | "alchemist";
+export type Specialization = "warden" | "duelist" | "plaguebinder" | "stormcaller";
+export type CraftingStation = "campfire" | "alchemy_table" | "forge" | "runic_workbench";
+
+export interface StatusEffectInstance {
+  type: StatusEffectType;
+  duration: number;
+  potency: number;
+  source?: string;
+}
+
+export interface WeatherEffect {
+  id: WeatherType;
+  name: Record<string, string>;
+  description: Record<string, string>;
+  combatEffect?: {
+    playerDamageMod?: number;
+    enemyDamageMod?: number;
+    playerDefenseMod?: number;
+    enemyDefenseMod?: number;
+  };
+  exploreEffect?: {
+    encounterChanceMod?: number;
+    lootChanceMod?: number;
+  };
+}
+
+export interface Skill {
+  [key: string]: any;
+  id: string;
+  name: Record<string, string>;
+  description: Record<string, string>;
+  maxLevel: number;
+  requires?: string[];
+  costPerLevel: number;
+  branch?: SkillBranch;
+  synergyWith?: string[];
+  effect: {
+    type: "stat" | "passive" | "active" | "ultimate";
+    stat?: "hp" | "damage" | "defense";
+    valuePerLevel?: number;
+    cooldownTurns?: number;
+    energyCost?: number;
+    damageScale?: number;
+    damageType?: DamageType;
+    appliesStatus?: {
+      type: StatusEffectType;
+      chance: number;
+      duration: number;
+      potency: number;
+    };
+  };
+}
+
+export interface CharacterClass {
+  id: string;
+  name: Record<string, string>;
+  description: Record<string, string>;
+  baseStats: {
+    maxHp: number;
+    maxEnergy: number;
+    baseDamage: [number, number];
+    baseDefense: number;
+    carryCapacity: number;
+  };
+  startWeaponId: string;
+  startArmorId: string;
+  startItems: { itemId: string; quantity: number }[];
+}
+
+export interface Recipe {
+  [key: string]: any;
+  id: string;
+  name: Record<string, string>;
+  resultItemId: string;
+  resultQuantity: number;
+  ingredients: { itemId: string; quantity: number }[];
+  requiredSkill?: { skillId: string; minLevel: number };
+  requiredStation?: CraftingStation;
+}
+
+export type LocationType = "hub" | "explore" | "road" | "camp";
+
+export interface Location {
+  [key: string]: any;
+  id: string;
+  name: Record<string, string>;
+  description: Record<string, string>;
+  type: LocationType;
+  image: string;
+  connectedLocations: string[];
+  possibleEnemies?: string[];
+  possibleLoot?: string[];
+  npcs?: string[];
+  allowedWeather?: WeatherType[];
+  craftingStations?: CraftingStation[];
+  merchantPriceMod?: number;
+}
+
+export interface Enemy {
+  [key: string]: any;
+  id: string;
+  name: Record<string, string>;
+  level: number;
+  hp: number;
+  maxHp: number;
+  maxEnergy: number;
+  damage: [number, number];
+  damageType?: DamageType;
+  role?: EnemyRole;
+  resistances?: Partial<Record<DamageType, number>>;
+  statusInflict?: {
+    type: StatusEffectType;
+    chance: number;
+    duration: number;
+    potency: number;
+  };
+  phases?: {
+    thresholdHpPercent: number;
+    name: Record<string, string>;
+    damageMod?: number;
+    defenseMod?: number;
+    statusImmunity?: StatusEffectType[];
+  }[];
+  adaptiveProfile?: {
+    punishBlocking?: boolean;
+    punishConsumables?: boolean;
+    punishAggression?: boolean;
+  };
+  dropTable: {
+    itemId: string;
+    chance: number;
+    min: number;
+    max: number;
+  }[];
+  xpReward: number;
+  goldReward: [number, number];
+}
+
+export type ItemType =
+  | "weapon"
+  | "armor"
+  | "consumable"
+  | "material"
+  | "quest"
+  | "recipe";
+
+export interface Item {
+  [key: string]: any;
+  id: string;
+  name: Record<string, string>;
+  description: Record<string, string>;
+  type: ItemType;
+  rarity?: ItemRarity;
+  affixes?: string[];
+  setId?: string;
+  uniqueLegendary?: boolean;
+  slotCategory?: "potion" | "material" | "gear" | "misc";
+  value: number;
+  weight: number;
+  stats?: {
+    damage?: [number, number];
+    defense?: number;
+    heal?: number;
+    energyRestore?: number;
+    throwDamage?: [number, number];
+    damageType?: DamageType;
+    critChanceBonus?: number;
+    counterChanceBonus?: number;
+    statusOnHit?: {
+      type: StatusEffectType;
+      chance: number;
+      duration: number;
+      potency: number;
+    };
+  };
+  teachesRecipeId?: string;
+}
+
+export interface InventoryItem {
+  itemId: string;
+  quantity: number;
+}
+
+export interface Player {
+  classId: PlayerClassId | null;
+  name: string;
+  level: number;
+  xp: number;
+  xpToNext: number;
+  skillPoints: number;
+  specializationId?: Specialization;
+  prestigeLevel?: number;
+  questPerks?: string[];
+  learnedSkills: Record<string, number>;
+  cooldowns?: Record<string, number>;
+  knownRecipes: string[];
+  merchantReputation?: Record<string, number>;
+  backpackSlots?: {
+    potion: number;
+    material: number;
+  };
+  statusEffects?: StatusEffectInstance[];
+  hp: number;
+  maxHp: number;
+  energy: number;
+  maxEnergy: number;
+  fatigue?: number;
+  discoveredLocations?: string[];
+  carryCapacity: number;
+  gold: number;
+  inventory: InventoryItem[];
+  equipment: {
+    weapon?: string;
+    armor?: string;
+  };
+  stats: {
+    baseDamage: [number, number];
+    baseDefense: number;
+  };
+}
+
+export interface QuestGoal {
+  type: "kill" | "explore" | "collect";
+  targetId: string;
+  targetCount: number;
+  currentCount: number;
+}
+
+export interface Quest {
+  [key: string]: any;
+  id: string;
+  name: Record<string, string>;
+  description: Record<string, string>;
+  locationId: string;
+  giverNpcId?: string;
+  turnInNpcId?: string;
+  goals: QuestGoal[];
+  rewards: {
+    xp: number;
+    gold: number;
+    items?: { itemId: string; quantity: number }[];
+    perkId?: string;
+    reputation?: { merchantId: string; amount: number }[];
+  };
+  isTurnInReady?: boolean;
+  isCompleted: boolean;
+}
+
+export interface Merchant {
+  id: string;
+  name: Record<string, string>;
+  locationId: string;
+  inventory: {
+    itemId: string;
+    price: number;
+  }[];
+}
+
+export interface DialogueNode {
+  id: string;
+  text: Record<string, string>;
+  options: {
+    text: Record<string, string>;
+    nextNodeId: string | null;
+    action?: "give_quest" | "heal" | "turn_in_quest";
+    actionPayload?: string;
+  }[];
+}
+
+export interface NPC {
+  id: string;
+  name: Record<string, string>;
+  locationId: string;
+  dialogueTree: Record<string, DialogueNode>;
+  defaultNode: string;
+}
+
+export type GameStateStatus =
+  | "traveling"
+  | "exploring"
+  | "combat"
+  | "hub"
+  | "resting"
+  | "camp";
+
+export type Language = "en" | "ru";
+export type VoiceChannel = "lore" | "quests" | "npcDialogue";
+
+export interface VoiceSettings {
+  lore: boolean;
+  quests: boolean;
+  npcDialogue: boolean;
+}
+
+export interface GameSettings {
+  language: Language;
+  voice: VoiceSettings;
+}
+
+export interface SaveData {
+  player: Player;
+  currentLocationId: string;
+  currentWeather: WeatherType;
+  weatherDuration: number;
+  quests: Quest[];
+  groundLootByLocation?: Record<string, { itemId: string; quantity: number }[]>;
+  status: GameStateStatus;
+  timestamp: number;
+  settings: GameSettings;
+}

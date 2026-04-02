@@ -1,0 +1,42 @@
+Quest Voice Lines
+=================
+
+[quest_line_001]
+RU: Уберите волков, угрожающих городу.
+EN: Clear out wolves threatening the town.
+
+[quest_line_002]
+RU: Прогоните бандитов с Южной дороги.
+EN: Drive bandits from South Road.
+
+[quest_line_003]
+RU: Соберите болотные травы для Миры.
+EN: Collect swamp herbs for Mira.
+
+[quest_line_004]
+RU: Разведайте древние руины и вернитесь живым.
+EN: Scout the Ancient Ruins and return alive.
+
+[quest_line_005]
+RU: Принесите 4 кристальных осколка из руин и пещер.
+EN: Bring 4 crystal shards from ruins and caves.
+
+[quest_line_006]
+RU: Устраните 3 пепельных налётчиков.
+EN: Eliminate 3 Ashroad Raiders.
+
+[quest_line_007]
+RU: Выследите 3 ледяных волков на горных маршрутах.
+EN: Hunt 3 Frost Wolves in mountain routes.
+
+[quest_line_008]
+RU: Победите 4 кристальных огонька ради летучей эссенции.
+EN: Defeat 4 Crystal Wisps for volatile essence.
+
+[quest_line_009]
+RU: Доставьте Дурну 5 кусков чешуйчатой кожи.
+EN: Deliver 5 scalehide pieces to Durn.
+
+[quest_line_010]
+RU: Победите каменного ревенанта под тропами к кузне.
+EN: Defeat the Stone Revenant beneath the forge paths.

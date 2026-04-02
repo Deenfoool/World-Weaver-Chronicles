@@ -1,0 +1,42 @@
+Next Step Proposals
+===================
+
+1) Inertial snap (velocity-based) for bottom sheet
+- Add velocity-aware snapping between collapsed / peek / open states.
+- Improve gesture feel on quick flicks and short drags.
+
+2) Haptic-style visual feedback on sheet state changes
+- Add subtle pulse/flash/ripple animations when sheet snaps.
+- Emulate tactile response visually for mobile UX.
+
+3) Mobile-only compact location header
+- Reduce header vertical footprint for 360-430px screens.
+- Keep title readable while preserving more background visibility.
+
+4) World simulation and social depth
+- Design and implement factions (identity, goals, territories, conflicts).
+- Add NPC relationship system (trust/reputation/affinity) with gameplay impact.
+- Redistribute existing NPCs across new and current hubs to improve world logic.
+- Create additional NPCs for each hub and faction role.
+- Expand dialogue trees significantly (branching lines, conditional responses, progression states).
+- Add long-form dialogue progression over time (NPC memory of player choices and quest outcomes).
+
+Roadmap (MVP / Mid / Late)
+===========================
+
+MVP
+- Knowledge Codex inside Bestiary: add lore articles, notes, maps, faction entries.
+- Bestiary discovery gating: entries appear only after interaction (fight/loot/talk/explore).
+- Living world v1: day/night cycle + basic NPC schedules + weather/day-of-week event hooks.
+- Voice settings and pipeline baseline: separate toggles for lore, quests, and NPC dialogue.
+
+Mid
+- Rare world events: caravans, ambushes, anomalies, timed boss hunts.
+- Economy loop v2: contracts, rare auctions, contraband routes, black market.
+- Legendary quest chains v1: long arcs with branching endings and unique rewards.
+
+Late
+- Derelict hub restoration system: invest resources to rebuild only abandoned/ruined hubs,
+  unlocking new services, vendors, and resident NPCs.
+- Legendary quest chains v2: faction-reactive consequences and multi-region outcomes.
+- Living world v2: deeper schedule logic, seasonal modifiers, long-term world state memory.

@@ -1,0 +1,78 @@
+{
+  "locations": [
+    {
+      "key": "town_oakhaven",
+      "id": "town_oakhaven",
+      "en": "Oakhaven",
+      "ru": "Окхейвен",
+      "enDesc": "A bustling trading hub.",
+      "ruDesc": "Оживленный торговый центр."
+    },
+    {
+      "key": "road_south",
+      "id": "road_south",
+      "en": "South Road",
+      "ru": "Южная дорога",
+      "enDesc": "Main route, lately unsafe.",
+      "ruDesc": "Главный путь, в последнее время небезопасен."
+    },
+    {
+      "key": "forest_whispering",
+      "id": "forest_whispering",
+      "en": "Whispering Forest",
+      "ru": "Шепчущий лес",
+      "enDesc": "Dark trees and old hunting paths.",
+      "ruDesc": "Темные деревья и старые тропы."
+    },
+    {
+      "key": "ruins_ancient",
+      "id": "ruins_ancient",
+      "en": "Ancient Ruins",
+      "ru": "Древние руины",
+      "enDesc": "Crumbling towers of forgotten age.",
+      "ruDesc": "Разрушающиеся башни забытой эпохи."
+    },
+    {
+      "key": "mountain_pass",
+      "id": "mountain_pass",
+      "en": "Troll Pass",
+      "ru": "Перевал троллей",
+      "enDesc": "Treacherous mountain path.",
+      "ruDesc": "Коварная горная тропа."
+    },
+    {
+      "key": "cave_deep",
+      "id": "cave_deep",
+      "en": "Echoing Cave",
+      "ru": "Эхо-пещера",
+      "enDesc": "Damp caves with crystals.",
+      "ruDesc": "Сырые пещеры с кристаллами."
+    },
+    {
+      "key": "swamp_murky",
+      "id": "swamp_murky",
+      "en": "Murky Swamp",
+      "ru": "Мрачное болото",
+      "enDesc": "Green fog and dead trees.",
+      "ruDesc": "Зеленый туман и мертвые деревья."
+    },
+    {
+      "key": "forgotten_forge",
+      "id": "forgotten_forge",
+      "en": "Forgotten Forge",
+      "ru": "Забытая кузня",
+      "enDesc": "Ancient forge still warm.",
+      "ruDesc": "Древняя кузня, еще теплая."
+    },
+    {
+      "key": "sunken_sanctum",
+      "id": "sunken_sanctum",
+      "en": "Sunken Sanctum",
+      "ru": "Затонувшее святилище",
+      "enDesc": "Flooded shrine of arcane glyphs.",
+      "ruDesc": "Затопленное святилище тайных рун."
+    }
+  ],
+  "enemies": [],
+  "npcs": []
+}

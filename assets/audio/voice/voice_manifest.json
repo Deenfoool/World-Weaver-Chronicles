@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "notes": "Record each line as separate .ogg file. Keep filenames equal to line ids.",
+  "channels": {
+    "lore": {
+      "enabledByDefault": true,
+      "sourceText": "assets/audio/voice/lore/lore_voice_lines.txt",
+      "outputDir": "assets/audio/voice/lore"
+    },
+    "quests": {
+      "enabledByDefault": true,
+      "sourceText": "assets/audio/voice/quests/quest_voice_lines.txt",
+      "outputDir": "assets/audio/voice/quests"
+    },
+    "npcDialogue": {
+      "enabledByDefault": true,
+      "sourceText": "assets/audio/voice/npc_dialogues/npc_dialogue_lines.txt",
+      "outputDir": "assets/audio/voice/npc_dialogues"
+    }
+  },
+  "naming": {
+    "example": "npc_line_001.ogg",
+    "format": "line_id.ogg",
+    "sampleRate": 44100,
+    "formatAudio": "ogg"
+  }
+}
