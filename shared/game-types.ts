@@ -291,7 +291,7 @@ export interface DialogueNode {
   options: {
     text: Record<string, string>;
     nextNodeId: string | null;
-    action?: "give_quest" | "heal" | "turn_in_quest";
+    action?: "give_quest" | "heal" | "turn_in_quest" | "open_merchant";
     actionPayload?: string;
   }[];
 }
@@ -420,11 +420,13 @@ export interface PendingEconomyConsequence {
   id: string;
   dueTick: number;
   originQuestId: string;
+  originType: "war" | "caravan_attack" | "crisis" | "prosperity" | "black_market_opened" | "hub_destroyed" | "hub_founded";
   triggerHubId: string;
   targetHubId?: string;
   kind: "retaliation" | "aid_arrival" | "tariff_relief" | "smuggler_crackdown";
   intensity: number;
   sourceBranch: "support" | "punish" | "support_a" | "support_b" | "neutral";
+  contextTag?: string;
 }
 
 export interface WorldEconomyState {
@@ -443,6 +445,12 @@ export interface WorldEconomyState {
   reputationLog: ReputationLogEntry[];
 }
 
+export interface GameTimeState {
+  day: number;
+  hour: number;
+  totalHours: number;
+}
+
 export interface SaveData {
   saveVersion?: number;
   player: Player;
@@ -453,6 +461,7 @@ export interface SaveData {
   groundLootByLocation?: Record<string, { itemId: string; quantity: number }[]>;
   codexUnlocks?: CodexUnlocks;
   worldEconomy?: WorldEconomyState;
+  gameTime?: GameTimeState;
   status: GameStateStatus;
   timestamp: number;
   settings: GameSettings;

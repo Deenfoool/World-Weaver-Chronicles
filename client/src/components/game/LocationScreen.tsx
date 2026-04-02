@@ -1,10 +1,10 @@
 import { useGameStore } from '../../game/store';
 import { Location, WorldEconomyEvent } from '../../game/types';
-import { LOCATIONS, MERCHANTS, NPCS, ITEMS } from '../../game/constants';
-import { Map, Tent, Footprints, ShieldAlert, Store, MessageCircle, Shield, FlaskConical, Compass, Hammer, ScrollText, Crown, ChevronUp, ChevronDown, Zap } from 'lucide-react';
+import { LOCATIONS, NPCS, ITEMS } from '../../game/constants';
+import { Map, Footprints, ShieldAlert, MessageCircle, Shield, FlaskConical, Compass, Hammer, ScrollText, Crown, ChevronUp, ChevronDown, Zap } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import MerchantPanel from './MerchantPanel';
 import NPCPanel from './NPCPanel';
+import WorldMapModal from './WorldMapModal';
 import { T } from '../../game/translations';
 
 interface Props {
@@ -26,6 +26,15 @@ const NPC_META: Record<
   npc_scout_lyra: { accent: '#79a85a', role: { en: 'Frontier Scout', ru: 'Пограничная разведчица' }, Icon: Compass },
   npc_blacksmith_durn: { accent: '#b26f4a', role: { en: 'Forge Master', ru: 'Мастер кузни' }, Icon: Hammer },
   npc_chronicler_vesna: { accent: '#8d7fb8', role: { en: 'Chronicler of Oaths', ru: 'Летописец клятв' }, Icon: ScrollText },
+  npc_marshal_thorne: { accent: '#d07b52', role: { en: 'Ironhold Marshal', ru: 'Маршал Айронхолда' }, Icon: Shield },
+  npc_quartermaster_ilda: { accent: '#e0b35d', role: { en: 'Quartermaster', ru: 'Квартирмейстер' }, Icon: Crown },
+  npc_smith_varr: { accent: '#c8734c', role: { en: 'Heavy Smith', ru: 'Тяжёлый кузнец' }, Icon: Hammer },
+  npc_envoy_sera: { accent: '#7aa8df', role: { en: 'Alliance Envoy', ru: 'Посол содружества' }, Icon: ScrollText },
+  npc_apothecary_nox: { accent: '#53b3a4', role: { en: 'Senior Apothecary', ru: 'Старший аптекарь' }, Icon: FlaskConical },
+  npc_factor_brom: { accent: '#9aa96d', role: { en: 'Trade Factor', ru: 'Торговый фактор' }, Icon: Compass },
+  npc_warden_rook: { accent: '#8caf66', role: { en: 'Marsh Warden', ru: 'Болотный хранитель' }, Icon: Shield },
+  npc_herbalist_vesk: { accent: '#6ebc79', role: { en: 'Union Herbalist', ru: 'Травник союза' }, Icon: FlaskConical },
+  npc_tinker_juno: { accent: '#8f93d2', role: { en: 'Field Tinker', ru: 'Полевой техник' }, Icon: Hammer },
 };
 
 function formatEconomyEvent(
@@ -68,10 +77,10 @@ function formatEconomyEvent(
 }
 
 export default function LocationScreen({ location, status }: Props) {
-  const { travelTo, explore, rest, settings, worldEconomy, player, raidCaravan, investInHub, runDiplomacy, sabotageHub } = useGameStore();
-  const [showMerchant, setShowMerchant] = useState(false);
+  const { travelTo, explore, settings, worldEconomy, player } = useGameStore();
   const [activeNpcId, setActiveNpcId] = useState<string | null>(null);
   const [menuTab, setMenuTab] = useState<'actions' | 'travel'>('actions');
+  const [isMapOpen, setIsMapOpen] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
   const [cardsVisible, setCardsVisible] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(1200);
@@ -86,21 +95,13 @@ export default function LocationScreen({ location, status }: Props) {
   const [travelPage, setTravelPage] = useState(0);
   const [npcPages, setNpcPages] = useState(1);
   const [travelPages, setTravelPages] = useState(1);
-  const [selectedHubTarget, setSelectedHubTarget] = useState<string>(location.id);
-  const [investGoldInput, setInvestGoldInput] = useState('50');
-  const [hubActionMessage, setHubActionMessage] = useState<string>('');
 
   const l = settings.language;
-  const localMerchant = Object.values(MERCHANTS).find(m => m.locationId === location.id);
   const localNpcs = location.npcs?.map(id => NPCS[id]) || [];
   const hubEconomy = worldEconomy.hubs[location.id];
   const hubRoutes = hubEconomy
     ? Object.values(worldEconomy.tradeRoutes || {}).filter((route) => route.fromHubId === location.id || route.toHubId === location.id)
     : [];
-  const availableHubTargets = useMemo(
-    () => Object.values(worldEconomy.hubs || {}).filter((hub) => !hub.destroyed),
-    [worldEconomy.hubs],
-  );
   const isMobile = viewportWidth < 768;
   const isNarrowMobile = viewportWidth >= 360 && viewportWidth <= 430;
 
@@ -153,14 +154,6 @@ export default function LocationScreen({ location, status }: Props) {
     return () => clearTimeout(id);
   }, [menuTab, localNpcs.length, location.connectedLocations.length, viewportWidth, compactMode]);
 
-  useEffect(() => {
-    const exists = availableHubTargets.some((hub) => hub.hubId === selectedHubTarget);
-    if (!exists) {
-      setSelectedHubTarget(location.id);
-    }
-  }, [availableHubTargets, selectedHubTarget, location.id]);
-
-  const selectedHubInfo = worldEconomy.hubs[selectedHubTarget];
   const recentEconomyEvents = useMemo(() => {
     const all = worldEconomy.events || [];
     return all
@@ -209,15 +202,12 @@ export default function LocationScreen({ location, status }: Props) {
     dragStartYRef.current = null;
   };
 
-  if (showMerchant && localMerchant) {
-    return <MerchantPanel merchant={localMerchant} onClose={() => setShowMerchant(false)} />;
-  }
-
   if (activeNpcId && NPCS[activeNpcId]) {
     return <NPCPanel npc={NPCS[activeNpcId]} onClose={() => setActiveNpcId(null)} />;
   }
 
   return (
+    <>
     <div className="flex-1 flex flex-col w-full h-full p-2 md:p-4 gap-2 md:gap-4 overflow-hidden">
       
       <div className="text-center mb-2 md:mb-6 mt-2 md:mt-6 shrink-0">
@@ -259,13 +249,27 @@ export default function LocationScreen({ location, status }: Props) {
             )}
           </div>
         )}
+        {isMobile && (
+          <button
+            onClick={() => {
+              setIsMapOpen(true);
+              setSheetLevel((prev) => (prev === 0 ? 1 : prev));
+            }}
+            data-tutorial-id="travel-icon"
+            className="absolute right-2 top-1 w-10 h-10 rounded-full border border-primary/45 bg-black/60 backdrop-blur-md text-primary flex items-center justify-center shadow-[0_0_22px_rgba(214,170,80,0.35)] animate-pulse hover:scale-105 transition-transform"
+            aria-label={l === 'ru' ? 'Открыть путешествия' : 'Open travel'}
+            title={l === 'ru' ? 'Путешествия' : 'Travel'}
+          >
+            <Map className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 flex items-end justify-center">
         <div className="relative w-full max-w-5xl">
           {compactMode && (
             <div className="absolute bottom-20 md:bottom-24 left-1/2 -translate-x-1/2 z-20 flex flex-wrap justify-center gap-2 px-2">
-              {location.type !== 'hub' ? (
+              {location.type !== 'hub' && (
                 <button
                   onClick={explore}
                   className="px-3 py-2 rounded-full border border-primary/40 bg-black/55 backdrop-blur-md text-primary text-[11px] uppercase tracking-wider flex items-center gap-1.5"
@@ -273,25 +277,6 @@ export default function LocationScreen({ location, status }: Props) {
                   <Zap className="w-3.5 h-3.5" />
                   {T.action_explore[l]}
                 </button>
-              ) : (
-                <>
-                  <button
-                    onClick={rest}
-                    className="px-3 py-2 rounded-full border border-primary/40 bg-black/55 backdrop-blur-md text-primary text-[11px] uppercase tracking-wider flex items-center gap-1.5"
-                  >
-                    <Tent className="w-3.5 h-3.5" />
-                    {l === 'ru' ? 'Отдых' : 'Rest'}
-                  </button>
-                  {localNpcs[0] && (
-                    <button
-                      onClick={() => setActiveNpcId(localNpcs[0].id)}
-                      className="px-3 py-2 rounded-full border border-white/20 bg-black/55 backdrop-blur-md text-white text-[11px] uppercase tracking-wider flex items-center gap-1.5"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5 text-primary" />
-                      {l === 'ru' ? 'Общаться' : 'Talk'}
-                    </button>
-                  )}
-                </>
               )}
             </div>
           )}
@@ -334,17 +319,17 @@ export default function LocationScreen({ location, status }: Props) {
               <ShieldAlert className="w-3.5 h-3.5" />
               {T.actions_title[l]}
             </button>
-            <button
-              onClick={() => setMenuTab('travel')}
-              className={`flex-1 ${isNarrowMobile ? 'text-[9px]' : 'text-[10px] md:text-xs'} uppercase tracking-[0.18em] py-2 rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${
-                menuTab === 'travel'
-                  ? 'border-primary/50 text-primary bg-primary/18 shadow-[0_0_24px_rgba(214,170,80,0.24)]'
-                  : 'border-white/10 text-muted-foreground bg-black/35 hover:text-white'
-              }`}
-            >
-              <Map className="w-3.5 h-3.5" />
-              {T.destinations[l]}
-            </button>
+            {!isMobile && (
+              <button
+                onClick={() => setIsMapOpen(true)}
+                className={`flex-1 ${isNarrowMobile ? 'text-[9px]' : 'text-[10px] md:text-xs'} uppercase tracking-[0.18em] py-2 rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${
+                  'border-primary/35 text-primary/90 bg-primary/10 hover:bg-primary/20'
+                }`}
+              >
+                <Map className="w-3.5 h-3.5" />
+                {l === 'ru' ? 'Карта мира' : 'World Map'}
+              </button>
+            )}
             <button
               onClick={() => {
                 if (isMobile) {
@@ -379,133 +364,6 @@ export default function LocationScreen({ location, status }: Props) {
               <div className="space-y-3">
                 {location.type === 'hub' ? (
                   <>
-                    <div className={`grid grid-cols-1 sm:grid-cols-2 ${isNarrowMobile ? 'gap-2' : 'gap-2.5'}`}>
-                      <button
-                        onClick={rest}
-                        className={`w-full rounded-xl border border-primary/30 bg-[linear-gradient(135deg,rgba(30,22,10,0.5),rgba(10,12,20,0.75))] ${isNarrowMobile ? 'px-2.5 py-2.5' : 'px-3 py-3'} text-left hover:brightness-110 transition-all`}
-                      >
-                        <p className={`${isNarrowMobile ? 'text-[9px]' : 'text-[10px]'} uppercase tracking-[0.16em] text-primary/80 mb-1`}>
-                          {l === 'ru' ? 'Убежище' : 'Safehouse'}
-                        </p>
-                        <p className={`font-serif text-primary ${isNarrowMobile ? 'text-base' : 'text-lg'} flex items-center gap-2`}>
-                          <Tent className="w-4 h-4" /> {T.action_rest[l]}
-                        </p>
-                      </button>
-                      {localMerchant && (
-                        <button
-                          onClick={() => setShowMerchant(true)}
-                          className={`w-full rounded-xl border border-secondary/45 bg-[linear-gradient(135deg,rgba(24,26,16,0.5),rgba(10,12,20,0.75))] ${isNarrowMobile ? 'px-2.5 py-2.5' : 'px-3 py-3'} text-left hover:brightness-110 transition-all`}
-                        >
-                          <p className={`${isNarrowMobile ? 'text-[9px]' : 'text-[10px]'} uppercase tracking-[0.16em] text-secondary-foreground/75 mb-1`}>
-                            {l === 'ru' ? 'Снабжение' : 'Supplies'}
-                          </p>
-                          <p className={`font-serif text-secondary-foreground ${isNarrowMobile ? 'text-base' : 'text-lg'} flex items-center gap-2`}>
-                            <Store className="w-4 h-4" /> {T.action_trade[l]}
-                          </p>
-                        </button>
-                      )}
-                    </div>
-
-                    {hubEconomy && (
-                      <div className="rounded-xl border border-primary/25 bg-black/35 p-3 space-y-3">
-                        <p className="text-[10px] uppercase tracking-[0.16em] text-primary/80">
-                          {l === 'ru' ? 'Управление хабом' : 'Hub Control'}
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          <select
-                            value={selectedHubTarget}
-                            onChange={(e) => setSelectedHubTarget(e.target.value)}
-                            className="sm:col-span-2 bg-black/45 border border-white/15 rounded px-2 py-2 text-xs text-white"
-                          >
-                            {availableHubTargets.map((hub) => (
-                              <option key={hub.hubId} value={hub.hubId}>
-                                {(LOCATIONS[hub.hubId]?.name?.[l] || hub.hubId)} · Lv {hub.level}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            value={investGoldInput}
-                            onChange={(e) => setInvestGoldInput(e.target.value.replace(/[^\d]/g, '').slice(0, 5))}
-                            placeholder={l === 'ru' ? 'Золото' : 'Gold'}
-                            className="bg-black/45 border border-white/15 rounded px-2 py-2 text-xs text-white"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          <button
-                            onClick={() => {
-                              const amount = Math.max(0, Number.parseInt(investGoldInput || '0', 10) || 0);
-                              if (amount <= 0) {
-                                setHubActionMessage(l === 'ru' ? 'Укажите сумму инвестиций.' : 'Set investment amount first.');
-                                return;
-                              }
-                              if (amount > player.gold) {
-                                setHubActionMessage(l === 'ru' ? 'Недостаточно золота для инвестиции.' : 'Not enough gold for this investment.');
-                                return;
-                              }
-                              investInHub(selectedHubTarget, amount);
-                              setHubActionMessage(
-                                l === 'ru'
-                                  ? `Инвестиция ${amount} золота направлена в ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`
-                                  : `Invested ${amount} gold into ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`,
-                              );
-                            }}
-                            className="rounded border border-emerald-500/35 bg-emerald-500/10 text-emerald-300 text-[11px] py-2 hover:bg-emerald-500/20 transition-colors"
-                          >
-                            {l === 'ru' ? 'Инвест.' : 'Invest'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              runDiplomacy(selectedHubTarget);
-                              setHubActionMessage(
-                                l === 'ru'
-                                  ? `Дипломатическая миссия отправлена в ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`
-                                  : `Diplomatic mission sent to ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`,
-                              );
-                            }}
-                            className="rounded border border-sky-500/35 bg-sky-500/10 text-sky-300 text-[11px] py-2 hover:bg-sky-500/20 transition-colors"
-                          >
-                            {l === 'ru' ? 'Диплом.' : 'Diplomacy'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              raidCaravan(selectedHubTarget);
-                              setHubActionMessage(
-                                l === 'ru'
-                                  ? `Караванный рейд проведён против ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`
-                                  : `Caravan raid executed against ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`,
-                              );
-                            }}
-                            className="rounded border border-amber-500/35 bg-amber-500/10 text-amber-300 text-[11px] py-2 hover:bg-amber-500/20 transition-colors"
-                          >
-                            {l === 'ru' ? 'Рейд' : 'Raid'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              sabotageHub(selectedHubTarget);
-                              setHubActionMessage(
-                                l === 'ru'
-                                  ? `Саботаж произведён в ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`
-                                  : `Sabotage carried out in ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`,
-                              );
-                            }}
-                            className="rounded border border-destructive/35 bg-destructive/10 text-destructive text-[11px] py-2 hover:bg-destructive/20 transition-colors"
-                          >
-                            {l === 'ru' ? 'Саботаж' : 'Sabotage'}
-                          </button>
-                        </div>
-                        {selectedHubInfo && (
-                          <p className="text-[11px] text-muted-foreground">
-                            {l === 'ru'
-                              ? `Цель: ур. ${selectedHubInfo.level}, богатство ${selectedHubInfo.wealth}, отношение ${selectedHubInfo.playerRelation}, режим ${selectedHubInfo.marketMode}`
-                              : `Target: lv ${selectedHubInfo.level}, wealth ${selectedHubInfo.wealth}, relation ${selectedHubInfo.playerRelation}, mode ${selectedHubInfo.marketMode}`}
-                          </p>
-                        )}
-                        {hubActionMessage && (
-                          <p className="text-[11px] text-primary/90">{hubActionMessage}</p>
-                        )}
-                      </div>
-                    )}
-
                     {hubEconomy && (
                       <div className="rounded-xl border border-white/10 bg-black/30 p-3 space-y-2">
                         <p className="text-[10px] uppercase tracking-[0.16em] text-white/70">
@@ -665,5 +523,14 @@ export default function LocationScreen({ location, status }: Props) {
       </div>
 
     </div>
+    <WorldMapModal
+      open={isMapOpen}
+      onOpenChange={setIsMapOpen}
+      language={l}
+      currentLocationId={location.id}
+      discoveredLocations={player.discoveredLocations || ['town_oakhaven']}
+      onTravel={travelTo}
+    />
+    </>
   );
 }

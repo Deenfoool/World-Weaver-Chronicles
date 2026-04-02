@@ -118,7 +118,7 @@ export default function CombatScreen() {
               <Progress value={combatAdrenaline} className="h-1.5 bg-black/60 [&>div]:bg-orange-500" />
 
               <div className="flex justify-between text-[10px] md:text-xs font-bold text-primary">
-                <span>{T.combat_combo[l]}</span>
+                <span data-tutorial-id="combat-combo">{T.combat_combo[l]}</span>
                 <span>x{Math.min(5, combatCombo)}</span>
               </div>
             </div>
@@ -234,7 +234,7 @@ export default function CombatScreen() {
       <div className="grid grid-cols-6 gap-2 shrink-0">
         {!combatEnded ? (
           <>
-            <button onClick={attack} className="rpg-button bg-destructive/20 hover:bg-destructive/40 hover:border-destructive text-white border-destructive/50 py-2 text-[10px] md:text-xs flex flex-col items-center justify-center gap-1">
+            <button data-tutorial-id="combat-attack" onClick={attack} className="rpg-button bg-destructive/20 hover:bg-destructive/40 hover:border-destructive text-white border-destructive/50 py-2 text-[10px] md:text-xs flex flex-col items-center justify-center gap-1">
               <Sword className="w-4 h-4" />
               {T.combat_attack[l]}
             </button>
@@ -244,7 +244,7 @@ export default function CombatScreen() {
               {T.combat_pouch[l]}
             </button>
 
-            <button onClick={block} className="rpg-button py-2 text-[10px] md:text-xs border-primary/50 text-primary hover:bg-primary/20 flex flex-col items-center justify-center gap-1">
+            <button data-tutorial-id="combat-block" onClick={block} className="rpg-button py-2 text-[10px] md:text-xs border-primary/50 text-primary hover:bg-primary/20 flex flex-col items-center justify-center gap-1">
               <Shield className="w-4 h-4" />
               {T.combat_block[l]}
             </button>
@@ -258,12 +258,12 @@ export default function CombatScreen() {
               {T.combat_second_wind[l]}
             </button>
 
-            <button onClick={() => useCombatItem('potion_small', 'self')} className="rpg-button py-2 text-[10px] md:text-xs bg-green-900/20 hover:bg-green-900/40 border-green-500/50 hover:border-green-500 text-green-100 flex flex-col items-center justify-center gap-1">
+            <button data-tutorial-id="combat-item" onClick={() => useCombatItem('potion_small', 'self')} className="rpg-button py-2 text-[10px] md:text-xs bg-green-900/20 hover:bg-green-900/40 border-green-500/50 hover:border-green-500 text-green-100 flex flex-col items-center justify-center gap-1">
               <Activity className="w-4 h-4" />
               {T.combat_heal[l]}
             </button>
 
-            <button onClick={flee} className="rpg-button py-2 text-[10px] md:text-xs border-muted-foreground hover:bg-white/10 flex flex-col items-center justify-center gap-1">
+            <button data-tutorial-id="combat-flee" onClick={flee} className="rpg-button py-2 text-[10px] md:text-xs border-muted-foreground hover:bg-white/10 flex flex-col items-center justify-center gap-1">
               <LogOut className="w-4 h-4" />
               {T.combat_flee[l]}
             </button>
@@ -284,6 +284,7 @@ export default function CombatScreen() {
             return (
               <button
                 key={skillId}
+                data-tutorial-id="combat-skill"
                 disabled={cd > 0}
                 onClick={() => useSkill(skillId)}
                 className="rpg-button py-2 text-[10px] md:text-xs border-primary/40 disabled:opacity-50"

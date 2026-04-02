@@ -4,6 +4,8 @@ import { Merchant } from '../../game/types';
 import { X, Coins } from 'lucide-react';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { T } from '../../game/translations';
+import { playSfx } from '../../game/audio';
+import { useEffect } from 'react';
 
 interface Props {
   merchant: Merchant;
@@ -14,6 +16,12 @@ export default function MerchantPanel({ merchant, onClose }: Props) {
   const { player, buyItem, sellItem, getBuyPrice, getSellPrice, settings } = useGameStore();
   const l = settings.language;
   const rep = player.merchantReputation?.[merchant.id] || 0;
+  useEffect(() => {
+    void playSfx('ui_panel_open');
+    return () => {
+      void playSfx('ui_panel_close');
+    };
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full animate-in bg-card/95 backdrop-blur-xl border border-border rounded-lg shadow-2xl overflow-hidden my-4 h-[600px]">
@@ -29,7 +37,7 @@ export default function MerchantPanel({ merchant, onClose }: Props) {
             <Coins className="w-5 h-5 md:w-6 md:h-6 text-yellow-500" />
             <span className="font-bold text-white">{player.gold}</span>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+          <button onClick={() => { void playSfx('ui_click_soft'); onClose(); }} className="p-2 hover:bg-white/10 rounded-full transition-colors">
             <X className="w-6 h-6 text-muted-foreground" />
           </button>
         </div>

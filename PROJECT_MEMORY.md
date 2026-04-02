@@ -1,6 +1,6 @@
 # PROJECT MEMORY - World Weaver Chronicles
 
-Last updated: 2026-04-02 (Europe/Moscow)
+Last updated: 2026-04-03 (Europe/Moscow)
 Repository: https://github.com/Deenfoool/World-Weaver-Chronicles
 Branch: main
 
@@ -258,6 +258,34 @@ Files touched for this:
   - shared/game-types.ts
 - Static content database:
   - shared/game-content.ts
+
+## 11) Newly completed on 2026-04-03 (Content Expansion Batch)
+- Expanded content pools in `shared/game-content.ts`:
+  - Added new resources/materials, combat consumables, weapons, armor.
+  - Added new enemy set including higher-tier road/hub threats and a new boss.
+  - Added multiple new NPC quests (collect/kill hybrid mix) for new hubs.
+- Added 3 new major hubs (design taxonomy-aligned):
+  - `hub_ironhold` (faction flavor),
+  - `hub_sky_consort` (alliance flavor),
+  - `hub_mire_union` (community flavor),
+  plus connector roads and map links.
+- Added dedicated NPC casts for each new hub:
+  - Ironhold: `npc_marshal_thorne`, `npc_quartermaster_ilda`, `npc_smith_varr`
+  - Sky Concord: `npc_envoy_sera`, `npc_apothecary_nox`, `npc_factor_brom`
+  - Mire Union: `npc_warden_rook`, `npc_herbalist_vesk`, `npc_tinker_juno`
+- Implemented category-based trade per NPC profession:
+  - Added merchant records for each NPC (`merchant_<npc_suffix>`),
+  - inventories are role-specific (alchemy, smithing, military supply, logistics, herbs, etc.).
+- NPC commerce integration in UI:
+  - `shared/game-types.ts`: dialogue action now supports `open_merchant`.
+  - `client/src/components/game/NPCPanel.tsx`:
+    - supports `open_merchant` dialogue action;
+    - auto-detects NPC merchant by ID pattern and shows `Open Shop / Открыть лавку` button;
+    - opens existing `MerchantPanel` directly from NPC dialog.
+- Added UI role metadata for new NPC cards in `client/src/components/game/LocationScreen.tsx`.
+- Validation status:
+  - `npm run check`: passed,
+  - `npm test`: passed (unit + UI).
 
 ## 11) Canonical Design Spec Snapshot (User-Provided, Keep Intact)
 
@@ -633,6 +661,198 @@ Sabotage:
   - quest-contract voice notifications in `QuestsPanel` (respects `voice.quests`).
   - intro lore narration playback in `GameLayout` (respects `voice.lore`).
   - Existing voice toggles from settings now control real runtime narration behavior.
+
+### 13.16 Quality Fix Pass (Logic/UX Consistency)
+- Fixed relation-status regression in retaliation processing:
+  - relation status now always recalculates from resulting strength (`allied/neutral/conflict`) instead of staying stale.
+
+- Fixed voice toggle runtime behavior:
+  - disabling any voice channel now immediately stops active speech playback (no lingering utterance).
+
+- Refined reputation threshold texts to match real formulas:
+  - journal now describes effect tiers using current relation coefficients from pricing/economy logic instead of generic promises.
+
+- Localized delayed consequence kinds in timeline:
+  - replaced raw technical keys with player-facing RU/EN labels.
+
+### 13.17 Context-Aware Consequences + Test Expansion
+- Delayed consequence system now includes deeper narrative context:
+  - pending consequence entries store `originType` and optional `contextTag`.
+  - consequence resolver scales impact by origin context (`war`, `caravan_attack`, `crisis`, `prosperity`, etc.), so retaliation/aid/tariff effects are no longer flat templates.
+  - timeline now shows localized consequence origin source.
+
+- Expanded automated test coverage beyond baseline:
+  - Added context-strength test for delayed consequences.
+  - Added branch-card generation tests for event-quest UI branching.
+  - Added localization tests for journal reason/kind/origin labels.
+  - Added voice runtime behavior test (disabled channel + stop behavior).
+  - Added follow-up chain depth guard test (no recursive infinite chain).
+  - Current test summary: 11/11 passing.
+
+### 13.18 Consistency + UX + UI-Flow Test Pass (Latest)
+- Escort route ambush generation was hardened against repeated single-point fallback:
+  - `buildEscortRoute` now prefers unique route/neighbor nodes for ambush points and avoids farming one location on short paths.
+
+- Delayed consequence timing is now context-dependent (not one-size-fits-all):
+  - Added `resolveConsequenceDelay(originType, kind)` with different timing windows for war/caravan/crisis/prosperity/black-market contexts.
+  - Consequences are now scheduled with narrative-sensitive due ticks.
+
+- Pending consequence queue now deduplicates/merges near-identical entries:
+  - `queueEconomyConsequence` merges same kind/trigger/target/origin/source branch within close tick window.
+  - Merged entries keep earliest due tick and combine intensity with clamp, reducing unnatural same-tick stacks.
+
+- Reputation journal copy corrected for formula accuracy:
+  - threshold effect text now references wealth drift impact (matching store math), removing misleading stability wording.
+
+- Voice toggle UX refined to channel-level stop behavior:
+  - `stopVoicePlayback(channel?)` now cancels only when the active utterance belongs to the disabled channel.
+  - Disabling quests voice no longer cuts npc/lore speech.
+
+- Test stack expanded with UI integration flow (Vitest + Testing Library):
+  - Added `test:ui` pipeline with `vitest` + `jsdom` setup.
+  - Added UI tests for:
+    - event contract modal/branch selection flow,
+    - faction journal localized timeline labels in DOM,
+    - settings voice toggle behavior with real store interactions.
+  - Updated scripts so `npm test` runs unit + UI suites.
+  - Current summary after this pass: unit `11/11` + UI `3/3` passing.
+
+### 13.19 Time-of-Day Gameplay Effects (Morning/Day/Evening/Night)
+- Implemented full time-of-day modifiers in core gameplay loop (`client/src/game/store.ts`):
+  - Added period-sensitive encounter/loot deltas:
+    - night: higher ambush pressure,
+    - morning: lower ambush pressure + better resource discovery,
+    - evening: medium ambush growth,
+    - day: slight visibility/detection pressure.
+
+- Enemy spawn pools now react to period:
+  - morning blocks unnatural-origin enemies where possible,
+  - day increases humanoid encounter weight,
+  - evening increases twilight enemy weight,
+  - night increases non-animal encounter pressure.
+
+- Economy events are now more night-conflict weighted:
+  - `rollMajorEconomyEvent` now has explicit night branch with higher war/caravan/crisis odds and lower prosperity odds.
+  - Black market chance already period-aware and kept active.
+
+- Combat visibility at night:
+  - player damage reduced at night (existing),
+  - enemy outgoing damage now also reduced at night for non-animal enemies.
+
+- Trade windows by period:
+  - night: trade is unavailable (buy/sell blocked),
+  - evening: partial merchant closures per merchant/time hash,
+  - morning: extra buy discount,
+  - evening: rare-item special pricing behavior.
+
+- Selling economy by period:
+  - day grants better sale prices for material/common resource flow (`item.type === "material"`).
+
+- Reputation progression by period:
+  - morning gives a small bonus to diplomacy outcomes,
+  - morning gives slight bonus to quest turn-in rewards/reputation effects.
+
+- Contraband/hostile actions at night:
+  - night scales raid/sabotage economy impact/intensity upward.
+
+- Rest behavior by period:
+  - night field rest is less effective (partial HP/energy recovery, lower fatigue reduction),
+  - hub/rest-to-morning behavior preserved.
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit `11/11`, UI `3/3`).
+
+### 13.20 SFX Integration Pass (Manifest + Available Files Only)
+- Audited `assets/audio/audio_manifest.json` against actual files on disk.
+- Current physical availability:
+  - Available now: `ui/*`, `economy/*`, `ambience/*`, `weather/*` listed in manifest.
+  - Missing now: most `combat/*`, `dialogue/*`, `items/*`, `skills/*`, `music/*` entries referenced by manifest.
+
+- Added runtime SFX helper:
+  - New file: `client/src/game/audio.ts`.
+  - Loads manifest once, resolves path/volume, and safely plays by sound ID.
+  - Guards playback to currently-available sound IDs to avoid noisy missing-file calls.
+
+- Connected currently-available SFX to gameplay/UI:
+  - `travel_whoosh_short` on travel start.
+  - `shop_buy` / `shop_sell` for successful merchant transactions.
+  - `ui_error_denied` when trade is closed by time-of-day.
+  - `ui_reward_claim` + `coin_jingle` on quest turn-in rewards.
+  - `ui_tab_switch` when switching mobile/desktop tabs.
+  - `ui_panel_open` / `ui_panel_close` and `ui_click_soft` in merchant panel open/close flow.
+
+- Fixed audio preload parsing in `GameLayout`:
+  - Preload now correctly reads `manifest.sounds[*].path` (previously parsed wrong top-level shape).
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit + UI).
+
+### 13.21 Combat Mechanics: Dodge + Stun (Player and Enemy)
+- Added dynamic dodge and stun mechanics in combat core (`client/src/game/store.ts`).
+
+- New combat helpers:
+  - `getEnemyDodgeChance(...)` — enemy dodge chance from level diff, energy state, role, and block state.
+  - `getPlayerDodgeChance(...)` — player dodge chance from defense, level diff, energy/fatigue/overload, weather, and day period.
+  - `getPlayerStunChance(...)` — player stun chance by action source (`attack` / `skill` / `throw`) with adrenaline and level scaling.
+  - `getEnemyStunChance(...)` — enemy stun chance with role/level scaling and player guard mitigation.
+  - `enemyIsImmuneToStatus(...)` — respects phase-based status immunity (including stun immunity on phases).
+
+- Integrated into player actions:
+  - Basic attack can now be dodged by enemy.
+  - Active/ultimate skill hit can now be dodged by enemy.
+  - Thrown combat items can now be dodged by enemy.
+  - Successful player hits can apply dynamic stun to enemy (if not immune).
+
+- Integrated into enemy turn:
+  - Player can dodge enemy hit before damage resolution.
+  - Enemy can apply dynamic stun to player even without native `statusInflict: stunned` entry (native stun stays respected, no duplicate stacking path).
+
+- Balancing notes:
+  - Dodge and stun use clamped probabilities to avoid extreme RNG spikes.
+  - Blocking reduces player dodge effectiveness during incoming enemy strike resolution.
+  - Existing status system (`stunned`) and turn-skip behavior reused; no schema migration needed.
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit `11/11`, UI `3/3`).
+
+### 13.22 World Map Modal + Fog of War
+- Reworked travel entry point into a modal world map flow:
+  - Added new component: `client/src/components/game/WorldMapModal.tsx`.
+  - Location map button now opens a dedicated modal map instead of relying only on travel cards.
+
+- Implemented "real map" graph view:
+  - Shows all current locations from `LOCATIONS`.
+  - Draws route links based on `connectedLocations`.
+  - Highlights current position.
+  - Travel is allowed only to directly connected nodes from current location.
+
+- Implemented fog of war behavior:
+  - Undiscovered locations are present on map but hidden with fog overlay and generic labels.
+  - Discovered/current locations show full names and state.
+  - Supports progressive reveal via existing `player.discoveredLocations` state.
+
+- Integrated into location screen:
+  - `client/src/components/game/LocationScreen.tsx` now uses `WorldMapModal`.
+  - Mobile travel icon opens modal.
+  - Desktop travel button opens modal as "World Map".
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit + UI).
+
+### 13.23 Economy Notice Lifetime Fix (3s Real-Time)
+- Fixed economy notification lifetime logic in `client/src/components/game/GameLayout.tsx`.
+- Previous behavior depended on economy ticks, which could cause stacking/stuck notices.
+- New behavior uses real-time timestamps per notice:
+  - `createdAtMs`
+  - `expiresAtMs = createdAtMs + 3000`
+- Added timeout-driven cleanup so each notice closes ~3 seconds after appearance regardless of tick cadence.
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed.
 - Bestiary:
   - client/src/components/game/BestiaryPanel.tsx
 - Audio manifest:

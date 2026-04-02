@@ -4,6 +4,86 @@ import { LOCATIONS, ENEMIES, NPCS } from '../../game/constants';
 import { T } from '../../game/translations';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { playVoiceText } from '../../game/voice';
+import { Quest } from '../../game/types';
+
+export function buildEventQuestBranchCards(quest: Quest, l: 'en' | 'ru') {
+  const origin = quest.eventQuest?.originType;
+  if (origin === 'war') {
+    return [
+      {
+        branch: 'support_a' as const,
+        title: l === 'ru' ? 'Поддержать сторону A' : 'Support Side A',
+        impacts: [
+          l === 'ru' ? '+12 репутации у A, -10 у B' : '+12 reputation with A, -10 with B',
+          l === 'ru' ? '- риск маршрутов A, + устойчивость рынка A' : '- route risk for A, + market stability for A',
+        ],
+      },
+      {
+        branch: 'support_b' as const,
+        title: l === 'ru' ? 'Поддержать сторону B' : 'Support Side B',
+        impacts: [
+          l === 'ru' ? '+12 репутации у B, -10 у A' : '+12 reputation with B, -10 with A',
+          l === 'ru' ? '- риск маршрутов B, + устойчивость рынка B' : '- route risk for B, + market stability for B',
+        ],
+      },
+      {
+        branch: 'neutral' as const,
+        title: l === 'ru' ? 'Нейтралитет' : 'Neutrality',
+        impacts: [
+          l === 'ru' ? '-3 репутации у обеих сторон' : '-3 reputation with both sides',
+          l === 'ru' ? 'Среднее давление цен, без сильной стабилизации' : 'Moderate price pressure, no strong stabilization',
+        ],
+      },
+    ];
+  }
+  if (origin === 'caravan_attack') {
+    const fights = Math.max(3, Math.min(6, 2 + (quest.eventQuest?.sourceHubLevel || 3)));
+    return [
+      {
+        branch: 'support' as const,
+        title: l === 'ru' ? 'Сопроводить караван' : 'Escort Caravan',
+        impacts: [
+          l === 'ru' ? `${fights} последовательных боёв в засадах на маршруте` : `${fights} consecutive ambush fights on route`,
+          l === 'ru' ? 'Идеальный проход: дополнительная награда при сдаче' : 'Perfect run: extra turn-in reward',
+        ],
+      },
+      {
+        branch: 'punish' as const,
+        title: l === 'ru' ? 'Ограбить караван' : 'Raid Caravan',
+        impacts: [
+          l === 'ru' ? `${fights} боёв, высокий лут, сильнее просадка экономики хаба` : `${fights} fights, high loot, stronger hub economy hit`,
+          l === 'ru' ? '- репутация и + дефицит/волатильность цен' : '- reputation and + scarcity/price volatility',
+        ],
+      },
+      {
+        branch: 'neutral' as const,
+        title: l === 'ru' ? 'Не вмешиваться' : 'Do Not Interfere',
+        impacts: [
+          l === 'ru' ? 'Без цепочки боёв, низкая награда' : 'No battle chain, low reward',
+          l === 'ru' ? 'Рынок почти без изменений' : 'Market mostly unchanged',
+        ],
+      },
+    ];
+  }
+  return [
+    {
+      branch: 'support' as const,
+      title: l === 'ru' ? 'Поддержать' : 'Support',
+      impacts: [
+        l === 'ru' ? '+ богатство/стабильность хаба, + отношение' : '+ hub wealth/stability, + relation',
+        l === 'ru' ? 'Цены ближе к стабильным' : 'Prices trend toward stable',
+      ],
+    },
+    {
+      branch: 'punish' as const,
+      title: l === 'ru' ? 'Наказать' : 'Punish',
+      impacts: [
+        l === 'ru' ? '- богатство/стабильность хаба, - отношение' : '- hub wealth/stability, - relation',
+        l === 'ru' ? 'Больше дефицита и ценового давления' : 'Higher scarcity and price pressure',
+      ],
+    },
+  ];
+}
 
 export default function QuestsPanel() {
   const { quests, settings, chooseEventQuestBranch, acceptQuest, contributeToQuestTreasury, turnInQuest, worldEconomy, player } = useGameStore();
@@ -34,84 +114,7 @@ export default function QuestsPanel() {
     () => offeredEventQuests.find((q) => q.id === previewQuestId) || null,
     [offeredEventQuests, previewQuestId],
   );
-  const getBranchCards = (quest: typeof offeredEventQuests[number]) => {
-    const origin = quest.eventQuest?.originType;
-    if (origin === 'war') {
-      return [
-        {
-          branch: 'support_a' as const,
-          title: l === 'ru' ? 'Поддержать сторону A' : 'Support Side A',
-          impacts: [
-            l === 'ru' ? '+12 репутации у A, -10 у B' : '+12 reputation with A, -10 with B',
-            l === 'ru' ? '- риск маршрутов A, + устойчивость рынка A' : '- route risk for A, + market stability for A',
-          ],
-        },
-        {
-          branch: 'support_b' as const,
-          title: l === 'ru' ? 'Поддержать сторону B' : 'Support Side B',
-          impacts: [
-            l === 'ru' ? '+12 репутации у B, -10 у A' : '+12 reputation with B, -10 with A',
-            l === 'ru' ? '- риск маршрутов B, + устойчивость рынка B' : '- route risk for B, + market stability for B',
-          ],
-        },
-        {
-          branch: 'neutral' as const,
-          title: l === 'ru' ? 'Нейтралитет' : 'Neutrality',
-          impacts: [
-            l === 'ru' ? '-3 репутации у обеих сторон' : '-3 reputation with both sides',
-            l === 'ru' ? 'Среднее давление цен, без сильной стабилизации' : 'Moderate price pressure, no strong stabilization',
-          ],
-        },
-      ];
-    }
-    if (origin === 'caravan_attack') {
-      const fights = Math.max(3, Math.min(6, 2 + (quest.eventQuest?.sourceHubLevel || 3)));
-      return [
-        {
-          branch: 'support' as const,
-          title: l === 'ru' ? 'Сопроводить караван' : 'Escort Caravan',
-          impacts: [
-            l === 'ru' ? `${fights} последовательных боёв в засадах на маршруте` : `${fights} consecutive ambush fights on route`,
-            l === 'ru' ? 'Идеальный проход: дополнительная награда при сдаче' : 'Perfect run: extra turn-in reward',
-          ],
-        },
-        {
-          branch: 'punish' as const,
-          title: l === 'ru' ? 'Ограбить караван' : 'Raid Caravan',
-          impacts: [
-            l === 'ru' ? `${fights} боёв, высокий лут, сильнее просадка экономики хаба` : `${fights} fights, high loot, stronger hub economy hit`,
-            l === 'ru' ? '- репутация и + дефицит/волатильность цен' : '- reputation and + scarcity/price volatility',
-          ],
-        },
-        {
-          branch: 'neutral' as const,
-          title: l === 'ru' ? 'Не вмешиваться' : 'Do Not Interfere',
-          impacts: [
-            l === 'ru' ? 'Без цепочки боёв, низкая награда' : 'No battle chain, low reward',
-            l === 'ru' ? 'Рынок почти без изменений' : 'Market mostly unchanged',
-          ],
-        },
-      ];
-    }
-    return [
-      {
-        branch: 'support' as const,
-        title: l === 'ru' ? 'Поддержать' : 'Support',
-        impacts: [
-          l === 'ru' ? '+ богатство/стабильность хаба, + отношение' : '+ hub wealth/stability, + relation',
-          l === 'ru' ? 'Цены ближе к стабильным' : 'Prices trend toward stable',
-        ],
-      },
-      {
-        branch: 'punish' as const,
-        title: l === 'ru' ? 'Наказать' : 'Punish',
-        impacts: [
-          l === 'ru' ? '- богатство/стабильность хаба, - отношение' : '- hub wealth/stability, - relation',
-          l === 'ru' ? 'Больше дефицита и ценового давления' : 'Higher scarcity and price pressure',
-        ],
-      },
-    ];
-  };
+  const getBranchCards = (quest: Quest) => buildEventQuestBranchCards(quest, l);
 
   useEffect(() => {
     const fresh = offeredEventQuests.find((q) => !spokenOfferIdsRef.current.has(q.id));

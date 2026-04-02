@@ -100,6 +100,17 @@ export const ITEMS: Record<string, Item> = {
   scroll_armor: { id: 'scroll_armor', name: { [EN]: 'Recipe: Leather Tunic', [RU]: 'Рецепт: Кожаная туника' }, description: { [EN]: 'Teaches leather armor crafting.', [RU]: 'Обучает крафту кожаной брони.' }, type: 'recipe', rarity: 'uncommon', value: 50, weight: 0.1, teachesRecipeId: 'recipe_leather_armor' },
   scroll_antidote: { id: 'scroll_antidote', name: { [EN]: 'Recipe: Antidote', [RU]: 'Рецепт: Антидот' }, description: { [EN]: 'Teaches antidote crafting.', [RU]: 'Обучает крафту антидота.' }, type: 'recipe', rarity: 'uncommon', value: 80, weight: 0.1, teachesRecipeId: 'recipe_antidote' },
   scroll_spear: { id: 'scroll_spear', name: { [EN]: 'Recipe: Warden Spear', [RU]: 'Рецепт: Копье хранителя' }, description: { [EN]: 'Teaches spear crafting.', [RU]: 'Обучает крафту копья.' }, type: 'recipe', rarity: 'rare', value: 105, weight: 0.1, teachesRecipeId: 'recipe_spear_ward' },
+  silver_ore: { id: 'silver_ore', name: { [EN]: 'Silver Ore', [RU]: 'Серебряная руда' }, description: { [EN]: 'Refined ore from high ridges.', [RU]: 'Очищенная руда из высокогорья.' }, type: 'material', slotCategory: 'material', rarity: 'uncommon', value: 28, weight: 1.1 },
+  obsidian_shard: { id: 'obsidian_shard', name: { [EN]: 'Obsidian Shard', [RU]: 'Осколок обсидиана' }, description: { [EN]: 'Volcanic glass used in elite forging.', [RU]: 'Вулканическое стекло для элитной ковки.' }, type: 'material', slotCategory: 'material', rarity: 'rare', value: 44, weight: 0.5 },
+  moon_herb: { id: 'moon_herb', name: { [EN]: 'Moon Herb', [RU]: 'Лунная трава' }, description: { [EN]: 'Cold-growing herb for advanced tonics.', [RU]: 'Холодостойкая трава для редких настоек.' }, type: 'material', slotCategory: 'material', rarity: 'uncommon', value: 25, weight: 0.3 },
+  titan_plate: { id: 'titan_plate', name: { [EN]: 'Titan Plate', [RU]: 'Титановая пластина' }, description: { [EN]: 'Dense plate from war machines.', [RU]: 'Плотная пластина из боевых конструкций.' }, type: 'material', slotCategory: 'material', rarity: 'rare', value: 58, weight: 1.4 },
+  silk_fiber: { id: 'silk_fiber', name: { [EN]: 'Silk Fiber', [RU]: 'Шелковое волокно' }, description: { [EN]: 'Flexible thread for reinforced gear.', [RU]: 'Гибкая нить для усиленного снаряжения.' }, type: 'material', slotCategory: 'material', rarity: 'uncommon', value: 22, weight: 0.2 },
+  weapon_silver_sabre: { id: 'weapon_silver_sabre', name: { [EN]: 'Silver Sabre', [RU]: 'Серебряная сабля' }, description: { [EN]: 'Balanced blade favored by ward captains.', [RU]: 'Сбалансированный клинок капитанов стражи.' }, type: 'weapon', slotCategory: 'gear', rarity: 'rare', value: 320, weight: 3.4, stats: { damage: [9, 14], damageType: 'physical', critChanceBonus: 0.06 } },
+  weapon_obsidian_maul: { id: 'weapon_obsidian_maul', name: { [EN]: 'Obsidian Maul', [RU]: 'Обсидиановая кувалда' }, description: { [EN]: 'Brutal hammer that breaks guard stances.', [RU]: 'Тяжёлая кувалда, ломающая стойки блока.' }, type: 'weapon', slotCategory: 'gear', rarity: 'epic', value: 520, weight: 7.2, stats: { damage: [12, 18], damageType: 'physical', counterChanceBonus: 0.05 } },
+  armor_titan_mail: { id: 'armor_titan_mail', name: { [EN]: 'Titan Mail', [RU]: 'Титановая кольчуга' }, description: { [EN]: 'Battle mail built for frontline attrition.', [RU]: 'Боевая кольчуга для затяжного фронта.' }, type: 'armor', slotCategory: 'gear', rarity: 'epic', value: 510, weight: 12.4, stats: { defense: 10, counterChanceBonus: 0.06 } },
+  armor_silk_vest: { id: 'armor_silk_vest', name: { [EN]: 'Silkguard Vest', [RU]: 'Жилет шелкостража' }, description: { [EN]: 'Light armor woven with alchemical thread.', [RU]: 'Лёгкая броня из алхимической нити.' }, type: 'armor', slotCategory: 'gear', rarity: 'rare', value: 295, weight: 4.1, stats: { defense: 6, critChanceBonus: 0.04 } },
+  potion_moon_focus: { id: 'potion_moon_focus', name: { [EN]: 'Moon Focus Tonic', [RU]: 'Настой лунного фокуса' }, description: { [EN]: 'Restores 30 energy and sharpens reflexes.', [RU]: 'Восстанавливает 30 энергии и повышает реакцию.' }, type: 'consumable', slotCategory: 'potion', rarity: 'rare', value: 84, weight: 0.4, stats: { energyRestore: 30 } },
+  potion_bastion_oil: { id: 'potion_bastion_oil', name: { [EN]: 'Bastion Oil', [RU]: 'Масло бастиона' }, description: { [EN]: 'Dense mixture that stabilizes breathing in battle.', [RU]: 'Плотная смесь для стабилизации дыхания в бою.' }, type: 'consumable', slotCategory: 'potion', rarity: 'rare', value: 88, weight: 0.5, stats: { heal: 24 } },
 };
 
 export const ENEMIES: Record<string, Enemy> = {
@@ -113,21 +124,31 @@ export const ENEMIES: Record<string, Enemy> = {
   frost_wolf: { id: 'frost_wolf', name: { [EN]: 'Frost Wolf', [RU]: 'Ледяной волк' }, role: 'berserker', level: 4, hp: 46, maxHp: 46, maxEnergy: 45, damage: [6, 10], damageType: 'frost', statusInflict: { type: 'stunned', chance: 0.12, duration: 1, potency: 1 }, xpReward: 48, goldReward: [8, 20], dropTable: [{ itemId: 'scalehide', chance: 0.65, min: 1, max: 1 }, { itemId: 'wolf_pelt', chance: 0.4, min: 1, max: 1 }] },
   ash_bandit: { id: 'ash_bandit', name: { [EN]: 'Ashroad Raider', [RU]: 'Пепельный налетчик' }, role: 'berserker', level: 5, hp: 58, maxHp: 58, maxEnergy: 52, damage: [7, 12], damageType: 'fire', xpReward: 62, goldReward: [12, 28], dropTable: [{ itemId: 'ember_resin', chance: 0.6, min: 1, max: 2 }, { itemId: 'bandit_bandana', chance: 0.7, min: 1, max: 1 }] },
   crystal_wisp: { id: 'crystal_wisp', name: { [EN]: 'Crystal Wisp', [RU]: 'Кристальный огонек' }, role: 'alchemist', level: 4, hp: 40, maxHp: 40, maxEnergy: 70, damage: [6, 11], damageType: 'arcane', resistances: { arcane: 0.2, physical: -0.1 }, xpReward: 54, goldReward: [6, 22], dropTable: [{ itemId: 'crystal_shard', chance: 0.8, min: 1, max: 2 }, { itemId: 'potion_energy', chance: 0.2, min: 1, max: 1 }] },
+  iron_legionnaire: { id: 'iron_legionnaire', name: { [EN]: 'Iron Legionnaire', [RU]: 'Железный легионер' }, role: 'tank', level: 7, hp: 108, maxHp: 108, maxEnergy: 72, damage: [10, 15], damageType: 'physical', resistances: { physical: 0.18 }, xpReward: 112, goldReward: [30, 60], dropTable: [{ itemId: 'silver_ore', chance: 0.7, min: 1, max: 2 }, { itemId: 'titan_plate', chance: 0.3, min: 1, max: 1 }] },
+  concord_assassin: { id: 'concord_assassin', name: { [EN]: 'Concord Assassin', [RU]: 'Ассасин Конкорда' }, role: 'berserker', level: 7, hp: 82, maxHp: 82, maxEnergy: 95, damage: [11, 17], damageType: 'physical', adaptiveProfile: { punishBlocking: true }, xpReward: 118, goldReward: [40, 72], dropTable: [{ itemId: 'obsidian_shard', chance: 0.55, min: 1, max: 2 }, { itemId: 'silk_fiber', chance: 0.6, min: 1, max: 2 }] },
+  mire_shaman: { id: 'mire_shaman', name: { [EN]: 'Mire Shaman', [RU]: 'Болотный шаман' }, role: 'alchemist', level: 7, hp: 88, maxHp: 88, maxEnergy: 110, damage: [9, 15], damageType: 'poison', statusInflict: { type: 'poisoned', chance: 0.55, duration: 3, potency: 5 }, xpReward: 124, goldReward: [28, 68], dropTable: [{ itemId: 'moon_herb', chance: 0.65, min: 1, max: 2 }, { itemId: 'swamp_weed', chance: 0.55, min: 1, max: 2 }] },
+  war_hulk: { id: 'war_hulk', name: { [EN]: 'War Hulk', [RU]: 'Осадный громила' }, role: 'boss', level: 10, hp: 245, maxHp: 245, maxEnergy: 140, damage: [15, 24], damageType: 'physical', resistances: { physical: 0.22, poison: 0.2, arcane: -0.08 }, phases: [{ thresholdHpPercent: 60, name: { [EN]: 'Siege Momentum', [RU]: 'Осадный натиск' }, damageMod: 1.2, defenseMod: 1.08 }, { thresholdHpPercent: 30, name: { [EN]: 'Overrun', [RU]: 'Прорыв' }, damageMod: 1.35, defenseMod: 1.02 }], xpReward: 360, goldReward: [150, 220], dropTable: [{ itemId: 'weapon_obsidian_maul', chance: 0.16, min: 1, max: 1 }, { itemId: 'armor_titan_mail', chance: 0.16, min: 1, max: 1 }, { itemId: 'titan_plate', chance: 0.9, min: 2, max: 4 }] },
   ruin_knight: { id: 'ruin_knight', name: { [EN]: 'Ruin Knight', [RU]: 'Руинный рыцарь' }, role: 'tank', level: 6, hp: 96, maxHp: 96, maxEnergy: 60, damage: [9, 14], damageType: 'physical', resistances: { physical: 0.15 }, xpReward: 90, goldReward: [22, 40], dropTable: [{ itemId: 'iron_ore', chance: 0.7, min: 1, max: 2 }, { itemId: 'armor_iron', chance: 0.08, min: 1, max: 1 }] },
   mire_siren: { id: 'mire_siren', name: { [EN]: 'Mire Siren', [RU]: 'Болотная сирена' }, role: 'alchemist', level: 6, hp: 72, maxHp: 72, maxEnergy: 88, damage: [8, 13], damageType: 'poison', statusInflict: { type: 'poisoned', chance: 0.45, duration: 2, potency: 4 }, xpReward: 96, goldReward: [18, 44], dropTable: [{ itemId: 'swamp_weed', chance: 0.65, min: 1, max: 2 }, { itemId: 'crystal_shard', chance: 0.35, min: 1, max: 1 }, { itemId: 'scalehide', chance: 0.45, min: 1, max: 1 }] },
   stone_revenant: { id: 'stone_revenant', name: { [EN]: 'Stone Revenant', [RU]: 'Каменный ревенант' }, role: 'boss', level: 9, hp: 210, maxHp: 210, maxEnergy: 120, damage: [14, 22], damageType: 'physical', resistances: { physical: 0.2, frost: 0.1, arcane: -0.05 }, phases: [{ thresholdHpPercent: 50, name: { [EN]: 'Grave Echo', [RU]: 'Эхо могилы' }, damageMod: 1.2, defenseMod: 1.1 }], xpReward: 300, goldReward: [120, 170], dropTable: [{ itemId: 'axe_blackiron', chance: 0.18, min: 1, max: 1 }, { itemId: 'armor_scalehide', chance: 0.18, min: 1, max: 1 }, { itemId: 'crystal_shard', chance: 0.9, min: 2, max: 4 }] },
 };
 
 export const LOCATIONS: Record<string, Location> = {
-  town_oakhaven: { id: 'town_oakhaven', name: { [EN]: 'Oakhaven', [RU]: 'Окхейвен' }, description: { [EN]: 'A bustling trading hub.', [RU]: 'Оживленный торговый центр.' }, type: 'hub', image: '/images/town-hub.png', connectedLocations: ['road_south', 'forest_whispering'], npcs: ['npc_elder_bran', 'npc_guard_tom', 'npc_alchemist_mira', 'npc_scout_lyra', 'npc_blacksmith_durn', 'npc_chronicler_vesna'], craftingStations: ['campfire', 'alchemy_table'], merchantPriceMod: 1, allowedWeather: ['clear', 'rain'] },
-  road_south: { id: 'road_south', name: { [EN]: 'South Road', [RU]: 'Южная дорога' }, description: { [EN]: 'Main route, lately unsafe.', [RU]: 'Главный путь, в последнее время небезопасен.' }, type: 'road', image: '/images/old-road.png', connectedLocations: ['town_oakhaven', 'ruins_ancient', 'mountain_pass'], possibleEnemies: ['bandit', 'ash_bandit', 'ruin_knight'], possibleLoot: ['gold', 'hard_wood', 'ember_resin'], merchantPriceMod: 1.05 },
-  forest_whispering: { id: 'forest_whispering', name: { [EN]: 'Whispering Forest', [RU]: 'Шепчущий лес' }, description: { [EN]: 'Dark trees and old hunting paths.', [RU]: 'Темные деревья и старые тропы.' }, type: 'explore', image: '/images/dark-forest.png', connectedLocations: ['town_oakhaven', 'swamp_murky'], possibleEnemies: ['wolf', 'goblin', 'frost_wolf', 'crystal_wisp'], possibleLoot: ['potion_small', 'swamp_weed', 'crystal_shard'], merchantPriceMod: 1.1, allowedWeather: ['clear', 'rain', 'fog'] },
+  town_oakhaven: { id: 'town_oakhaven', name: { [EN]: 'Oakhaven', [RU]: 'Окхейвен' }, description: { [EN]: 'A bustling trading hub.', [RU]: 'Оживленный торговый центр.' }, type: 'hub', image: '/images/town-hub.png', connectedLocations: ['road_south', 'forest_whispering', 'road_ironway', 'road_concord'], npcs: ['npc_elder_bran', 'npc_guard_tom', 'npc_alchemist_mira', 'npc_scout_lyra', 'npc_blacksmith_durn', 'npc_chronicler_vesna'], craftingStations: ['campfire', 'alchemy_table'], merchantPriceMod: 1, allowedWeather: ['clear', 'rain'] },
+  road_south: { id: 'road_south', name: { [EN]: 'South Road', [RU]: 'Южная дорога' }, description: { [EN]: 'Main route, lately unsafe.', [RU]: 'Главный путь, в последнее время небезопасен.' }, type: 'road', image: '/images/old-road.png', connectedLocations: ['town_oakhaven', 'ruins_ancient', 'mountain_pass', 'road_marshlane'], possibleEnemies: ['bandit', 'ash_bandit', 'ruin_knight'], possibleLoot: ['gold', 'hard_wood', 'ember_resin'], merchantPriceMod: 1.05 },
+  forest_whispering: { id: 'forest_whispering', name: { [EN]: 'Whispering Forest', [RU]: 'Шепчущий лес' }, description: { [EN]: 'Dark trees and old hunting paths.', [RU]: 'Темные деревья и старые тропы.' }, type: 'explore', image: '/images/dark-forest.png', connectedLocations: ['town_oakhaven', 'swamp_murky', 'road_marshlane'], possibleEnemies: ['wolf', 'goblin', 'frost_wolf', 'crystal_wisp', 'mire_shaman'], possibleLoot: ['potion_small', 'swamp_weed', 'crystal_shard', 'moon_herb'], merchantPriceMod: 1.1, allowedWeather: ['clear', 'rain', 'fog'] },
   ruins_ancient: { id: 'ruins_ancient', name: { [EN]: 'Ancient Ruins', [RU]: 'Древние руины' }, description: { [EN]: 'Crumbling towers of forgotten age.', [RU]: 'Разрушающиеся башни забытой эпохи.' }, type: 'explore', image: '/images/ruined-castle.png', connectedLocations: ['road_south', 'forgotten_forge'], possibleEnemies: ['goblin', 'bandit', 'plague_alchemist', 'ruin_knight', 'ash_bandit', 'crystal_wisp'], possibleLoot: ['gold', 'scroll_armor', 'scroll_spear', 'crystal_shard', 'ember_resin'], craftingStations: ['runic_workbench'], merchantPriceMod: 1.12, allowedWeather: ['clear', 'rain', 'storm'] },
-  mountain_pass: { id: 'mountain_pass', name: { [EN]: 'Troll Pass', [RU]: 'Перевал троллей' }, description: { [EN]: 'Treacherous mountain path.', [RU]: 'Коварная горная тропа.' }, type: 'road', image: '/images/mountain-pass.png', connectedLocations: ['road_south', 'cave_deep'], possibleEnemies: ['troll', 'bandit', 'ruin_knight', 'frost_wolf'], possibleLoot: ['iron_ore', 'scalehide'], merchantPriceMod: 1.2, allowedWeather: ['clear', 'snow', 'storm'] },
+  mountain_pass: { id: 'mountain_pass', name: { [EN]: 'Troll Pass', [RU]: 'Перевал троллей' }, description: { [EN]: 'Treacherous mountain path.', [RU]: 'Коварная горная тропа.' }, type: 'road', image: '/images/mountain-pass.png', connectedLocations: ['road_south', 'cave_deep', 'road_ironway'], possibleEnemies: ['troll', 'bandit', 'ruin_knight', 'frost_wolf', 'iron_legionnaire'], possibleLoot: ['iron_ore', 'scalehide', 'silver_ore'], merchantPriceMod: 1.2, allowedWeather: ['clear', 'snow', 'storm'] },
   cave_deep: { id: 'cave_deep', name: { [EN]: 'Echoing Cave', [RU]: 'Эхо-пещера' }, description: { [EN]: 'Damp caves with crystals.', [RU]: 'Сырые пещеры с кристаллами.' }, type: 'explore', image: '/images/cave.png', connectedLocations: ['mountain_pass', 'sunken_sanctum'], possibleEnemies: ['troll', 'goblin', 'crystal_wisp', 'stone_revenant'], possibleLoot: ['gold', 'potion_large', 'sword_iron', 'crystal_shard'], craftingStations: ['forge'], merchantPriceMod: 1.18, allowedWeather: ['clear'] },
-  swamp_murky: { id: 'swamp_murky', name: { [EN]: 'Murky Swamp', [RU]: 'Мрачное болото' }, description: { [EN]: 'Green fog and dead trees.', [RU]: 'Зеленый туман и мертвые деревья.' }, type: 'explore', image: '/images/swamp.png', connectedLocations: ['forest_whispering'], possibleEnemies: ['swamp_thing', 'plague_alchemist', 'mire_siren'], possibleLoot: ['swamp_weed', 'scroll_potion', 'scalehide'], merchantPriceMod: 1.14, allowedWeather: ['fog', 'rain'] },
+  swamp_murky: { id: 'swamp_murky', name: { [EN]: 'Murky Swamp', [RU]: 'Мрачное болото' }, description: { [EN]: 'Green fog and dead trees.', [RU]: 'Зеленый туман и мертвые деревья.' }, type: 'explore', image: '/images/swamp.png', connectedLocations: ['forest_whispering', 'road_marshlane'], possibleEnemies: ['swamp_thing', 'plague_alchemist', 'mire_siren', 'mire_shaman'], possibleLoot: ['swamp_weed', 'scroll_potion', 'scalehide', 'moon_herb'], merchantPriceMod: 1.14, allowedWeather: ['fog', 'rain'] },
   forgotten_forge: { id: 'forgotten_forge', name: { [EN]: 'Forgotten Forge', [RU]: 'Забытая кузня' }, description: { [EN]: 'Ancient forge still warm.', [RU]: 'Древняя кузня, еще теплая.' }, type: 'explore', image: '/images/ruined-castle.png', connectedLocations: ['ruins_ancient'], possibleEnemies: ['sentinel_golem', 'stone_revenant'], possibleLoot: ['wardplate_legendary', 'axe_blackiron', 'armor_scalehide'], craftingStations: ['forge'], merchantPriceMod: 1.25, allowedWeather: ['clear', 'storm'] },
-  sunken_sanctum: { id: 'sunken_sanctum', name: { [EN]: 'Sunken Sanctum', [RU]: 'Затонувшее святилище' }, description: { [EN]: 'Flooded shrine of arcane glyphs.', [RU]: 'Затопленное святилище тайных рун.' }, type: 'explore', image: '/images/cave.png', connectedLocations: ['cave_deep'], possibleEnemies: ['sentinel_golem', 'mire_siren', 'stone_revenant'], possibleLoot: ['blade_eclipse', 'crystal_shard', 'potion_frost'], craftingStations: ['runic_workbench'], merchantPriceMod: 1.3, allowedWeather: ['clear'] },
+  sunken_sanctum: { id: 'sunken_sanctum', name: { [EN]: 'Sunken Sanctum', [RU]: 'Затонувшее святилище' }, description: { [EN]: 'Flooded shrine of arcane glyphs.', [RU]: 'Затопленное святилище тайных рун.' }, type: 'explore', image: '/images/cave.png', connectedLocations: ['cave_deep'], possibleEnemies: ['sentinel_golem', 'mire_siren', 'stone_revenant', 'war_hulk'], possibleLoot: ['blade_eclipse', 'crystal_shard', 'potion_frost', 'obsidian_shard'], craftingStations: ['runic_workbench'], merchantPriceMod: 1.3, allowedWeather: ['clear'] },
+  road_ironway: { id: 'road_ironway', name: { [EN]: 'Ironway', [RU]: 'Железный тракт' }, description: { [EN]: 'Military road to the citadel foundries.', [RU]: 'Военный тракт к цитадели и литейным дворам.' }, type: 'road', image: '/images/old-road.png', connectedLocations: ['town_oakhaven', 'mountain_pass', 'hub_ironhold'], possibleEnemies: ['iron_legionnaire', 'ash_bandit', 'ruin_knight'], possibleLoot: ['silver_ore', 'iron_ore', 'titan_plate'], merchantPriceMod: 1.16, allowedWeather: ['clear', 'rain', 'storm'] },
+  road_concord: { id: 'road_concord', name: { [EN]: 'Concord Causeway', [RU]: 'Тракт Конкорда' }, description: { [EN]: 'Well-guarded alliance route with hidden toll posts.', [RU]: 'Охраняемая дорога содружества с тайными заставами.' }, type: 'road', image: '/images/old-road.png', connectedLocations: ['town_oakhaven', 'hub_sky_consort'], possibleEnemies: ['concord_assassin', 'bandit', 'crystal_wisp'], possibleLoot: ['obsidian_shard', 'silk_fiber', 'gold'], merchantPriceMod: 1.12, allowedWeather: ['clear', 'rain', 'fog'] },
+  road_marshlane: { id: 'road_marshlane', name: { [EN]: 'Marshlane', [RU]: 'Топкий путь' }, description: { [EN]: 'Mudbound track leading to the bog communities.', [RU]: 'Топкая тропа к болотным общинам.' }, type: 'road', image: '/images/old-road.png', connectedLocations: ['road_south', 'forest_whispering', 'swamp_murky', 'hub_mire_union'], possibleEnemies: ['mire_shaman', 'swamp_thing', 'plague_alchemist'], possibleLoot: ['moon_herb', 'swamp_weed', 'silk_fiber'], merchantPriceMod: 1.15, allowedWeather: ['fog', 'rain'] },
+  hub_ironhold: { id: 'hub_ironhold', name: { [EN]: 'Ironhold Citadel', [RU]: 'Цитадель Айронхолд' }, description: { [EN]: 'Faction stronghold of military foundries and siege forges.', [RU]: 'Фракционная крепость литейных дворов и осадных кузниц.' }, type: 'hub', image: '/images/town-hub.png', connectedLocations: ['road_ironway'], npcs: ['npc_marshal_thorne', 'npc_quartermaster_ilda', 'npc_smith_varr'], craftingStations: ['forge', 'campfire'], merchantPriceMod: 1.09, allowedWeather: ['clear', 'snow', 'storm'] },
+  hub_sky_consort: { id: 'hub_sky_consort', name: { [EN]: 'Sky Concord', [RU]: 'Небесный Конкорд' }, description: { [EN]: 'Alliance trade summit where contracts are written in steel and silk.', [RU]: 'Торговый узел содружества, где контракты пишут сталью и шелком.' }, type: 'hub', image: '/images/town-hub.png', connectedLocations: ['road_concord'], npcs: ['npc_envoy_sera', 'npc_apothecary_nox', 'npc_factor_brom'], craftingStations: ['alchemy_table', 'runic_workbench'], merchantPriceMod: 1.04, allowedWeather: ['clear', 'rain', 'fog'] },
+  hub_mire_union: { id: 'hub_mire_union', name: { [EN]: 'Mire Union', [RU]: 'Болотный Союз' }, description: { [EN]: 'Community hub of gatherers, herbalists, and swamp ferrymen.', [RU]: 'Сообщество сборщиков, травников и болотных перевозчиков.' }, type: 'hub', image: '/images/town-hub.png', connectedLocations: ['road_marshlane'], npcs: ['npc_warden_rook', 'npc_herbalist_vesk', 'npc_tinker_juno'], craftingStations: ['campfire', 'alchemy_table'], merchantPriceMod: 1.11, allowedWeather: ['fog', 'rain', 'clear'] },
 };
 
 const QUESTS_FROM_NPCS: Quest[] = [
@@ -141,6 +162,16 @@ const QUESTS_FROM_NPCS: Quest[] = [
   { id: 'quest_wisp_spark', giverNpcId: 'npc_alchemist_mira', turnInNpcId: 'npc_alchemist_mira', name: { [EN]: 'Spark Capture', [RU]: 'Поймать искру' }, description: { [EN]: 'Defeat 4 Crystal Wisps for volatile essence.', [RU]: 'Победите 4 кристальных огонька ради летучей эссенции.' }, locationId: 'ruins_ancient', goals: [{ type: 'kill', targetId: 'crystal_wisp', targetCount: 4, currentCount: 0 }], rewards: { xp: 180, gold: 145, items: [{ itemId: 'crystal_shard', quantity: 2 }, { itemId: 'potion_energy', quantity: 1 }] }, isTurnInReady: false, isCompleted: false },
   { id: 'quest_scalehide_trade', giverNpcId: 'npc_blacksmith_durn', turnInNpcId: 'npc_blacksmith_durn', name: { [EN]: 'Hide for Steel', [RU]: 'Кожа в обмен на сталь' }, description: { [EN]: 'Deliver 5 scalehide pieces to Durn.', [RU]: 'Доставьте Дурну 5 кусков чешуйчатой кожи.' }, locationId: 'swamp_murky', goals: [{ type: 'collect', targetId: 'scalehide', targetCount: 5, currentCount: 0 }], rewards: { xp: 190, gold: 160, items: [{ itemId: 'armor_scalehide', quantity: 1 }] }, isTurnInReady: false, isCompleted: false },
   { id: 'quest_revenant_watch', giverNpcId: 'npc_elder_bran', turnInNpcId: 'npc_elder_bran', name: { [EN]: 'Watcher of Stone', [RU]: 'Страж из камня' }, description: { [EN]: 'Defeat the Stone Revenant beneath the forge paths.', [RU]: 'Победите каменного ревенанта под тропами к кузне.' }, locationId: 'forgotten_forge', goals: [{ type: 'kill', targetId: 'stone_revenant', targetCount: 1, currentCount: 0 }], rewards: { xp: 360, gold: 280, items: [{ itemId: 'axe_blackiron', quantity: 1 }] }, isTurnInReady: false, isCompleted: false },
+  { id: 'quest_ironhold_silver', giverNpcId: 'npc_quartermaster_ilda', turnInNpcId: 'npc_quartermaster_ilda', name: { [EN]: 'Silver for the Forges', [RU]: 'Серебро для литейных' }, description: { [EN]: 'Bring 6 units of silver ore to Ironhold quartermasters.', [RU]: 'Доставьте 6 единиц серебряной руды в снабжение Айронхолда.' }, locationId: 'road_ironway', goals: [{ type: 'collect', targetId: 'silver_ore', targetCount: 6, currentCount: 0 }], rewards: { xp: 210, gold: 170, items: [{ itemId: 'weapon_silver_sabre', quantity: 1 }] }, isTurnInReady: false, isCompleted: false },
+  { id: 'quest_ironhold_plate', giverNpcId: 'npc_smith_varr', turnInNpcId: 'npc_smith_varr', name: { [EN]: 'Titan Plate Ledger', [RU]: 'Партия титановых пластин' }, description: { [EN]: 'Recover 4 titan plates from legionary patrol wrecks.', [RU]: 'Верните 4 титановые пластины с разбитых патрульных обозов.' }, locationId: 'road_ironway', goals: [{ type: 'collect', targetId: 'titan_plate', targetCount: 4, currentCount: 0 }], rewards: { xp: 225, gold: 190, items: [{ itemId: 'armor_titan_mail', quantity: 1 }] }, isTurnInReady: false, isCompleted: false },
+  { id: 'quest_marshal_front', giverNpcId: 'npc_marshal_thorne', turnInNpcId: 'npc_marshal_thorne', name: { [EN]: 'Frontline Directive', [RU]: 'Директива фронта' }, description: { [EN]: 'Defeat 3 Iron Legionnaires threatening the relay towers.', [RU]: 'Устраните 3 железных легионеров, угрожающих сигнальным башням.' }, locationId: 'road_ironway', goals: [{ type: 'kill', targetId: 'iron_legionnaire', targetCount: 3, currentCount: 0 }], rewards: { xp: 235, gold: 205, items: [{ itemId: 'potion_bastion_oil', quantity: 2 }] }, isTurnInReady: false, isCompleted: false },
+  { id: 'quest_concord_shadow', giverNpcId: 'npc_envoy_sera', turnInNpcId: 'npc_envoy_sera', name: { [EN]: 'Shadow Tariffs', [RU]: 'Теневые пошлины' }, description: { [EN]: 'Eliminate 3 Concord assassins harassing diplomatic caravans.', [RU]: 'Устраните 3 ассасинов Конкорда, терроризирующих дипломатические караваны.' }, locationId: 'road_concord', goals: [{ type: 'kill', targetId: 'concord_assassin', targetCount: 3, currentCount: 0 }], rewards: { xp: 240, gold: 210, items: [{ itemId: 'obsidian_shard', quantity: 2 }] }, isTurnInReady: false, isCompleted: false },
+  { id: 'quest_concord_fibers', giverNpcId: 'npc_factor_brom', turnInNpcId: 'npc_factor_brom', name: { [EN]: 'Silk Transit', [RU]: 'Шелковый транзит' }, description: { [EN]: 'Secure 6 silk fibers for alliance courier harnesses.', [RU]: 'Соберите 6 шелковых волокон для упряжи курьеров содружества.' }, locationId: 'road_concord', goals: [{ type: 'collect', targetId: 'silk_fiber', targetCount: 6, currentCount: 0 }], rewards: { xp: 210, gold: 185, items: [{ itemId: 'armor_silk_vest', quantity: 1 }] }, isTurnInReady: false, isCompleted: false },
+  { id: 'quest_apothecary_moon', giverNpcId: 'npc_apothecary_nox', turnInNpcId: 'npc_apothecary_nox', name: { [EN]: 'Moon Distillate', [RU]: 'Лунный дистиллят' }, description: { [EN]: 'Gather 5 moon herbs for advanced focus tonics.', [RU]: 'Добудьте 5 лунных трав для настоек концентрации.' }, locationId: 'road_marshlane', goals: [{ type: 'collect', targetId: 'moon_herb', targetCount: 5, currentCount: 0 }], rewards: { xp: 215, gold: 175, items: [{ itemId: 'potion_moon_focus', quantity: 2 }] }, isTurnInReady: false, isCompleted: false },
+  { id: 'quest_union_shaman', giverNpcId: 'npc_warden_rook', turnInNpcId: 'npc_warden_rook', name: { [EN]: 'Bogline Patrol', [RU]: 'Патруль топей' }, description: { [EN]: 'Defeat 3 mire shamans along Marshlane.', [RU]: 'Уничтожьте 3 болотных шаманов на Топком пути.' }, locationId: 'road_marshlane', goals: [{ type: 'kill', targetId: 'mire_shaman', targetCount: 3, currentCount: 0 }], rewards: { xp: 220, gold: 180, items: [{ itemId: 'potion_antidote', quantity: 2 }, { itemId: 'moon_herb', quantity: 2 }] }, isTurnInReady: false, isCompleted: false },
+  { id: 'quest_union_reeds', giverNpcId: 'npc_herbalist_vesk', turnInNpcId: 'npc_herbalist_vesk', name: { [EN]: 'Reed Apothecary', [RU]: 'Тростниковая аптека' }, description: { [EN]: 'Collect 6 swamp weeds for Mire Union emergency stores.', [RU]: 'Соберите 6 болотных трав для аварийного запаса Болотного Союза.' }, locationId: 'swamp_murky', goals: [{ type: 'collect', targetId: 'swamp_weed', targetCount: 6, currentCount: 0 }], rewards: { xp: 180, gold: 150, items: [{ itemId: 'potion_bastion_oil', quantity: 1 }] }, isTurnInReady: false, isCompleted: false },
+  { id: 'quest_union_machines', giverNpcId: 'npc_tinker_juno', turnInNpcId: 'npc_tinker_juno', name: { [EN]: 'Salvage the Siege', [RU]: 'Осадный лом' }, description: { [EN]: 'Recover 3 titan plates and 3 obsidian shards for field prototypes.', [RU]: 'Добудьте 3 титановые пластины и 3 обсидиановых осколка для полевых прототипов.' }, locationId: 'sunken_sanctum', goals: [{ type: 'collect', targetId: 'titan_plate', targetCount: 3, currentCount: 0 }, { type: 'collect', targetId: 'obsidian_shard', targetCount: 3, currentCount: 0 }], rewards: { xp: 290, gold: 245, items: [{ itemId: 'weapon_obsidian_maul', quantity: 1 }] }, isTurnInReady: false, isCompleted: false },
+  { id: 'quest_war_hulk_break', giverNpcId: 'npc_marshal_thorne', turnInNpcId: 'npc_marshal_thorne', name: { [EN]: 'Break the War Hulk', [RU]: 'Сломить Осадного громилу' }, description: { [EN]: 'Hunt down and defeat the War Hulk in the drowned sanctum corridors.', [RU]: 'Найдите и уничтожьте Осадного громилу в коридорах затонувшего святилища.' }, locationId: 'sunken_sanctum', goals: [{ type: 'kill', targetId: 'war_hulk', targetCount: 1, currentCount: 0 }], rewards: { xp: 460, gold: 360, items: [{ itemId: 'armor_titan_mail', quantity: 1 }, { itemId: 'weapon_silver_sabre', quantity: 1 }] }, isTurnInReady: false, isCompleted: false },
 ];
 
 export const INITIAL_QUESTS: Quest[] = [];
@@ -157,6 +188,150 @@ export const MERCHANTS: Record<string, Merchant> = {
       { itemId: 'scroll_armor', price: 65 }, { itemId: 'scroll_antidote', price: 120 }, { itemId: 'scroll_spear', price: 170 },
       { itemId: 'potion_frost', price: 95 }, { itemId: 'axe_blackiron', price: 420 }, { itemId: 'armor_scalehide', price: 390 },
       { itemId: 'crystal_shard', price: 46 }, { itemId: 'ember_resin', price: 44 }, { itemId: 'scalehide', price: 42 },
+    ],
+  },
+  merchant_elder_bran: {
+    id: 'merchant_elder_bran',
+    name: { [EN]: 'Council Provisioner', [RU]: 'Советский снабженец' },
+    locationId: 'town_oakhaven',
+    inventory: [
+      { itemId: 'potion_small', price: 22 }, { itemId: 'potion_energy', price: 44 }, { itemId: 'scroll_potion', price: 72 },
+      { itemId: 'scroll_armor', price: 72 }, { itemId: 'scroll_antidote', price: 130 }, { itemId: 'gold', price: 2 },
+    ],
+  },
+  merchant_guard_tom: {
+    id: 'merchant_guard_tom',
+    name: { [EN]: 'Guard Quarter Rack', [RU]: 'Арсенал стражи' },
+    locationId: 'town_oakhaven',
+    inventory: [
+      { itemId: 'sword_rusty', price: 42 }, { itemId: 'sword_iron', price: 160 }, { itemId: 'armor_leather', price: 65 },
+      { itemId: 'armor_iron', price: 210 }, { itemId: 'potion_small', price: 22 }, { itemId: 'potion_bastion_oil', price: 96 },
+    ],
+  },
+  merchant_alchemist_mira: {
+    id: 'merchant_alchemist_mira',
+    name: { [EN]: 'Mira\'s Reagents', [RU]: 'Реагенты Миры' },
+    locationId: 'town_oakhaven',
+    inventory: [
+      { itemId: 'potion_small', price: 20 }, { itemId: 'potion_large', price: 52 }, { itemId: 'potion_energy', price: 46 },
+      { itemId: 'potion_antidote', price: 52 }, { itemId: 'potion_frost', price: 98 }, { itemId: 'potion_moon_focus', price: 95 },
+      { itemId: 'potion_bastion_oil', price: 99 }, { itemId: 'bomb_fire', price: 65 }, { itemId: 'bomb_toxic', price: 90 },
+      { itemId: 'swamp_weed', price: 20 }, { itemId: 'moon_herb', price: 36 },
+    ],
+  },
+  merchant_scout_lyra: {
+    id: 'merchant_scout_lyra',
+    name: { [EN]: 'Lyra\'s Trail Cache', [RU]: 'Схрон Лиры' },
+    locationId: 'town_oakhaven',
+    inventory: [
+      { itemId: 'wolf_pelt', price: 16 }, { itemId: 'hard_wood', price: 20 }, { itemId: 'scalehide', price: 30 },
+      { itemId: 'silk_fiber', price: 34 }, { itemId: 'potion_energy', price: 48 }, { itemId: 'bomb_fire', price: 66 },
+    ],
+  },
+  merchant_blacksmith_durn: {
+    id: 'merchant_blacksmith_durn',
+    name: { [EN]: 'Durn\'s Forge Stock', [RU]: 'Кузня Дурна' },
+    locationId: 'town_oakhaven',
+    inventory: [
+      { itemId: 'iron_ore', price: 27 }, { itemId: 'silver_ore', price: 42 }, { itemId: 'titan_plate', price: 75 },
+      { itemId: 'sword_iron', price: 170 }, { itemId: 'spear_ward', price: 340 }, { itemId: 'axe_blackiron', price: 435 },
+      { itemId: 'weapon_silver_sabre', price: 480 }, { itemId: 'armor_iron', price: 220 }, { itemId: 'armor_titan_mail', price: 640 },
+      { itemId: 'armor_scalehide', price: 405 },
+    ],
+  },
+  merchant_chronicler_vesna: {
+    id: 'merchant_chronicler_vesna',
+    name: { [EN]: 'Archive Exchange', [RU]: 'Архивный обмен' },
+    locationId: 'town_oakhaven',
+    inventory: [
+      { itemId: 'scroll_potion', price: 72 }, { itemId: 'scroll_armor', price: 72 }, { itemId: 'scroll_antidote', price: 126 },
+      { itemId: 'scroll_spear', price: 176 }, { itemId: 'crystal_shard', price: 50 }, { itemId: 'obsidian_shard', price: 68 },
+      { itemId: 'potion_moon_focus', price: 92 },
+    ],
+  },
+  merchant_marshal_thorne: {
+    id: 'merchant_marshal_thorne',
+    name: { [EN]: 'Frontline Commissary', [RU]: 'Фронтовой комиссариат' },
+    locationId: 'hub_ironhold',
+    inventory: [
+      { itemId: 'weapon_silver_sabre', price: 470 }, { itemId: 'spear_ward', price: 335 }, { itemId: 'armor_titan_mail', price: 620 },
+      { itemId: 'armor_iron', price: 215 }, { itemId: 'potion_bastion_oil', price: 92 }, { itemId: 'potion_energy', price: 44 },
+    ],
+  },
+  merchant_quartermaster_ilda: {
+    id: 'merchant_quartermaster_ilda',
+    name: { [EN]: 'Ilda Supply Office', [RU]: 'Снабжение Ильды' },
+    locationId: 'hub_ironhold',
+    inventory: [
+      { itemId: 'iron_ore', price: 25 }, { itemId: 'silver_ore', price: 40 }, { itemId: 'titan_plate', price: 72 },
+      { itemId: 'hard_wood', price: 19 }, { itemId: 'scalehide', price: 29 }, { itemId: 'silk_fiber', price: 31 },
+    ],
+  },
+  merchant_smith_varr: {
+    id: 'merchant_smith_varr',
+    name: { [EN]: 'Varr Heavy Forge', [RU]: 'Тяжёлая кузня Варра' },
+    locationId: 'hub_ironhold',
+    inventory: [
+      { itemId: 'sword_iron', price: 164 }, { itemId: 'axe_blackiron', price: 430 }, { itemId: 'weapon_obsidian_maul', price: 760 },
+      { itemId: 'weapon_silver_sabre', price: 465 }, { itemId: 'armor_iron', price: 210 }, { itemId: 'armor_titan_mail', price: 630 },
+      { itemId: 'armor_scalehide', price: 398 },
+    ],
+  },
+  merchant_envoy_sera: {
+    id: 'merchant_envoy_sera',
+    name: { [EN]: 'Concord Contracts', [RU]: 'Контракты Конкорда' },
+    locationId: 'hub_sky_consort',
+    inventory: [
+      { itemId: 'silk_fiber', price: 30 }, { itemId: 'armor_silk_vest', price: 420 }, { itemId: 'potion_moon_focus', price: 90 },
+      { itemId: 'scroll_antidote', price: 120 }, { itemId: 'obsidian_shard', price: 66 }, { itemId: 'gold', price: 2 },
+    ],
+  },
+  merchant_apothecary_nox: {
+    id: 'merchant_apothecary_nox',
+    name: { [EN]: 'Nox Distillery', [RU]: 'Дистиллерия Нокса' },
+    locationId: 'hub_sky_consort',
+    inventory: [
+      { itemId: 'potion_small', price: 19 }, { itemId: 'potion_large', price: 50 }, { itemId: 'potion_energy', price: 42 },
+      { itemId: 'potion_antidote', price: 49 }, { itemId: 'potion_moon_focus', price: 88 }, { itemId: 'potion_bastion_oil', price: 94 },
+      { itemId: 'bomb_toxic', price: 86 }, { itemId: 'moon_herb', price: 34 }, { itemId: 'swamp_weed', price: 19 },
+    ],
+  },
+  merchant_factor_brom: {
+    id: 'merchant_factor_brom',
+    name: { [EN]: 'Brom Trade Ledger', [RU]: 'Торговый реестр Брома' },
+    locationId: 'hub_sky_consort',
+    inventory: [
+      { itemId: 'iron_ore', price: 26 }, { itemId: 'silver_ore', price: 41 }, { itemId: 'obsidian_shard', price: 67 },
+      { itemId: 'silk_fiber', price: 30 }, { itemId: 'titan_plate', price: 74 }, { itemId: 'crystal_shard', price: 49 },
+    ],
+  },
+  merchant_warden_rook: {
+    id: 'merchant_warden_rook',
+    name: { [EN]: 'Rook Marsh Armory', [RU]: 'Болотный арсенал Рука' },
+    locationId: 'hub_mire_union',
+    inventory: [
+      { itemId: 'spear_ward', price: 325 }, { itemId: 'axe_blackiron', price: 410 }, { itemId: 'armor_scalehide', price: 380 },
+      { itemId: 'armor_silk_vest', price: 405 }, { itemId: 'potion_bastion_oil', price: 90 }, { itemId: 'potion_antidote', price: 48 },
+    ],
+  },
+  merchant_herbalist_vesk: {
+    id: 'merchant_herbalist_vesk',
+    name: { [EN]: 'Vesk Herb Table', [RU]: 'Травный стол Веска' },
+    locationId: 'hub_mire_union',
+    inventory: [
+      { itemId: 'swamp_weed', price: 17 }, { itemId: 'moon_herb', price: 30 }, { itemId: 'potion_small', price: 19 },
+      { itemId: 'potion_energy', price: 42 }, { itemId: 'potion_antidote', price: 48 }, { itemId: 'potion_moon_focus', price: 86 },
+      { itemId: 'bomb_toxic', price: 84 },
+    ],
+  },
+  merchant_tinker_juno: {
+    id: 'merchant_tinker_juno',
+    name: { [EN]: 'Juno Field Workshop', [RU]: 'Полевой цех Джуно' },
+    locationId: 'hub_mire_union',
+    inventory: [
+      { itemId: 'titan_plate', price: 76 }, { itemId: 'obsidian_shard', price: 68 }, { itemId: 'silver_ore', price: 40 },
+      { itemId: 'weapon_obsidian_maul', price: 750 }, { itemId: 'armor_titan_mail', price: 620 }, { itemId: 'bomb_fire', price: 61 },
+      { itemId: 'bomb_toxic', price: 86 },
     ],
   },
 };
@@ -252,6 +427,107 @@ export const NPCS: Record<string, NPC> = {
       sanctum: { id: 'sanctum', text: { [EN]: 'Reach the Sunken Sanctum and return with memory intact. That alone is knowledge.', [RU]: 'Доберись до Затонувшего святилища и сохрани память. Уже это будет знанием.' }, options: [{ text: { [EN]: 'I will return.', [RU]: 'Я вернусь.' }, nextNodeId: null }] },
       runic_trial: { id: 'runic_trial', text: { [EN]: 'Defeat the Sentinel Golem and describe the runes that ignite as it falls.', [RU]: 'Победи Голема-стража и опиши руны, вспыхивающие в момент его падения.' }, options: [{ text: { [EN]: 'I accept the trial.', [RU]: 'Принимаю испытание.' }, nextNodeId: null }] },
       lore_archive: { id: 'lore_archive', text: { [EN]: 'Before kingdoms, there were Wardens. Before Wardens, there were storms that listened.', [RU]: 'До королевств были Хранители. До Хранителей были бури, которые слушали.' }, options: [{ text: { [EN]: 'And now storms obey no one.', [RU]: 'А теперь бури никого не слушают.' }, nextNodeId: 'start' }] },
+    },
+  },
+  npc_marshal_thorne: {
+    id: 'npc_marshal_thorne', name: { [EN]: 'Marshal Thorne', [RU]: 'Маршал Торн' }, locationId: 'hub_ironhold', defaultNode: 'start',
+    dialogueTree: {
+      start: { id: 'start', text: { [EN]: 'Ironhold holds because discipline never sleeps.', [RU]: 'Айронхолд стоит, пока дисциплина не спит.' }, options: [
+        { text: { [EN]: 'Assign me to the frontline.', [RU]: 'Назначьте меня на передовую.' }, nextNodeId: 'frontline', action: 'give_quest', actionPayload: 'quest_marshal_front' },
+        { text: { [EN]: 'Any major threat?', [RU]: 'Есть крупная угроза?' }, nextNodeId: 'hulk', action: 'give_quest', actionPayload: 'quest_war_hulk_break' },
+        { text: { [EN]: 'Open military supplies.', [RU]: 'Открыть военное снабжение.' }, nextNodeId: 'start', action: 'open_merchant', actionPayload: 'merchant_marshal_thorne' },
+        { text: { [EN]: 'Stand down.', [RU]: 'Отбой.' }, nextNodeId: null },
+      ] },
+      frontline: { id: 'frontline', text: { [EN]: 'Relay towers are under pressure. Remove legion raiders and report.', [RU]: 'Сигнальные башни под давлением. Устрани налётчиков легиона и доложи.' }, options: [{ text: { [EN]: 'Understood.', [RU]: 'Понял.' }, nextNodeId: null }] },
+      hulk: { id: 'hulk', text: { [EN]: 'A war hulk is grinding through old sanctum halls. Break it before nightfall.', [RU]: 'Осадный громила продирается через святилище. Сломай его до ночи.' }, options: [{ text: { [EN]: 'I take the order.', [RU]: 'Принимаю приказ.' }, nextNodeId: null }] },
+    },
+  },
+  npc_quartermaster_ilda: {
+    id: 'npc_quartermaster_ilda', name: { [EN]: 'Quartermaster Ilda', [RU]: 'Квартирмейстер Ильда' }, locationId: 'hub_ironhold', defaultNode: 'start',
+    dialogueTree: {
+      start: { id: 'start', text: { [EN]: 'Ledgers first, glory second. Supplies win wars.', [RU]: 'Сначала ведомости, потом слава. Войны выигрывают поставки.' }, options: [
+        { text: { [EN]: 'I can haul silver ore.', [RU]: 'Я могу доставить серебряную руду.' }, nextNodeId: 'silver', action: 'give_quest', actionPayload: 'quest_ironhold_silver' },
+        { text: { [EN]: 'Open supply office.', [RU]: 'Открыть склад снабжения.' }, nextNodeId: 'start', action: 'open_merchant', actionPayload: 'merchant_quartermaster_ilda' },
+        { text: { [EN]: 'That is all.', [RU]: 'На этом всё.' }, nextNodeId: null },
+      ] },
+      silver: { id: 'silver', text: { [EN]: 'Six units of silver ore. Clean chunks only.', [RU]: 'Шесть единиц серебряной руды. Только чистая порода.' }, options: [{ text: { [EN]: 'I will bring them.', [RU]: 'Принесу.' }, nextNodeId: null }] },
+    },
+  },
+  npc_smith_varr: {
+    id: 'npc_smith_varr', name: { [EN]: 'Master Smith Varr', [RU]: 'Мастер-кузнец Варр' }, locationId: 'hub_ironhold', defaultNode: 'start',
+    dialogueTree: {
+      start: { id: 'start', text: { [EN]: 'Heat, ore, and timing. Miss one and steel dies.', [RU]: 'Жар, руда и тайминг. Потеряешь одно — сталь мертва.' }, options: [
+        { text: { [EN]: 'Need titan plates?', [RU]: 'Нужны титановые пластины?' }, nextNodeId: 'plates', action: 'give_quest', actionPayload: 'quest_ironhold_plate' },
+        { text: { [EN]: 'Show me forge stock.', [RU]: 'Показать кузнечный товар.' }, nextNodeId: 'start', action: 'open_merchant', actionPayload: 'merchant_smith_varr' },
+        { text: { [EN]: 'I will return.', [RU]: 'Я вернусь.' }, nextNodeId: null },
+      ] },
+      plates: { id: 'plates', text: { [EN]: 'Bring four titan plates from wrecked patrol rigs.', [RU]: 'Принеси четыре титановые пластины с разбитых патрульных машин.' }, options: [{ text: { [EN]: 'Accepted.', [RU]: 'Принято.' }, nextNodeId: null }] },
+    },
+  },
+  npc_envoy_sera: {
+    id: 'npc_envoy_sera', name: { [EN]: 'Envoy Sera', [RU]: 'Посол Сера' }, locationId: 'hub_sky_consort', defaultNode: 'start',
+    dialogueTree: {
+      start: { id: 'start', text: { [EN]: 'Concord survives by contracts and pressure points.', [RU]: 'Конкорд держится на контрактах и точках давления.' }, options: [
+        { text: { [EN]: 'I can clear shadow operatives.', [RU]: 'Я устраню теневых оперативников.' }, nextNodeId: 'shadow', action: 'give_quest', actionPayload: 'quest_concord_shadow' },
+        { text: { [EN]: 'Open contract market.', [RU]: 'Открыть контрактный рынок.' }, nextNodeId: 'start', action: 'open_merchant', actionPayload: 'merchant_envoy_sera' },
+        { text: { [EN]: 'No deal today.', [RU]: 'Сегодня без сделки.' }, nextNodeId: null },
+      ] },
+      shadow: { id: 'shadow', text: { [EN]: 'Three assassins disrupt caravan diplomacy. Remove them quietly or loudly.', [RU]: 'Три ассасина срывают караванную дипломатию. Устрани их тихо или громко.' }, options: [{ text: { [EN]: 'I will handle it.', [RU]: 'Я разберусь.' }, nextNodeId: null }] },
+    },
+  },
+  npc_apothecary_nox: {
+    id: 'npc_apothecary_nox', name: { [EN]: 'Apothecary Nox', [RU]: 'Аптекарь Нокс' }, locationId: 'hub_sky_consort', defaultNode: 'start',
+    dialogueTree: {
+      start: { id: 'start', text: { [EN]: 'Moon herbs and careful dosing. That is the line between cure and poison.', [RU]: 'Лунные травы и точная дозировка. Это грань между лечением и ядом.' }, options: [
+        { text: { [EN]: 'I will gather moon herbs.', [RU]: 'Соберу лунные травы.' }, nextNodeId: 'moon', action: 'give_quest', actionPayload: 'quest_apothecary_moon' },
+        { text: { [EN]: 'Open apothecary stock.', [RU]: 'Открыть аптекарский ассортимент.' }, nextNodeId: 'start', action: 'open_merchant', actionPayload: 'merchant_apothecary_nox' },
+        { text: { [EN]: 'Later.', [RU]: 'Позже.' }, nextNodeId: null },
+      ] },
+      moon: { id: 'moon', text: { [EN]: 'Bring five moon herbs. Fresh cuts only.', [RU]: 'Принеси пять лунных трав. Только свежий сбор.' }, options: [{ text: { [EN]: 'Understood.', [RU]: 'Понял.' }, nextNodeId: null }] },
+    },
+  },
+  npc_factor_brom: {
+    id: 'npc_factor_brom', name: { [EN]: 'Factor Brom', [RU]: 'Фактор Бром' }, locationId: 'hub_sky_consort', defaultNode: 'start',
+    dialogueTree: {
+      start: { id: 'start', text: { [EN]: 'Logistics is war by arithmetic.', [RU]: 'Логистика — это война арифметикой.' }, options: [
+        { text: { [EN]: 'Need courier fibers?', [RU]: 'Нужны волокна для курьеров?' }, nextNodeId: 'fibers', action: 'give_quest', actionPayload: 'quest_concord_fibers' },
+        { text: { [EN]: 'Open trade ledger.', [RU]: 'Открыть торговый реестр.' }, nextNodeId: 'start', action: 'open_merchant', actionPayload: 'merchant_factor_brom' },
+        { text: { [EN]: 'Maybe next cycle.', [RU]: 'В следующий цикл.' }, nextNodeId: null },
+      ] },
+      fibers: { id: 'fibers', text: { [EN]: 'Secure six silk fibers for alliance dispatch rigs.', [RU]: 'Добудь шесть шелковых волокон для упряжи альянса.' }, options: [{ text: { [EN]: 'I will secure them.', [RU]: 'Добуду.' }, nextNodeId: null }] },
+    },
+  },
+  npc_warden_rook: {
+    id: 'npc_warden_rook', name: { [EN]: 'Warden Rook', [RU]: 'Хранитель Рук' }, locationId: 'hub_mire_union', defaultNode: 'start',
+    dialogueTree: {
+      start: { id: 'start', text: { [EN]: 'Bog lines must hold. If they break, everyone drowns in panic.', [RU]: 'Линия топей должна держаться. Если рухнет — всех утопит паника.' }, options: [
+        { text: { [EN]: 'I will patrol the marshline.', [RU]: 'Я выйду в болотный патруль.' }, nextNodeId: 'bogline', action: 'give_quest', actionPayload: 'quest_union_shaman' },
+        { text: { [EN]: 'Open marsh armory.', [RU]: 'Открыть болотный арсенал.' }, nextNodeId: 'start', action: 'open_merchant', actionPayload: 'merchant_warden_rook' },
+        { text: { [EN]: 'Hold the line.', [RU]: 'Держите рубеж.' }, nextNodeId: null },
+      ] },
+      bogline: { id: 'bogline', text: { [EN]: 'Three mire shamans are poisoning patrol wells. End it.', [RU]: 'Трое болотных шаманов травят колодцы патруля. Останови это.' }, options: [{ text: { [EN]: 'On it.', [RU]: 'Выполняю.' }, nextNodeId: null }] },
+    },
+  },
+  npc_herbalist_vesk: {
+    id: 'npc_herbalist_vesk', name: { [EN]: 'Herbalist Vesk', [RU]: 'Травник Веск' }, locationId: 'hub_mire_union', defaultNode: 'start',
+    dialogueTree: {
+      start: { id: 'start', text: { [EN]: 'Roots, reeds, and patience. Nature pays those who listen.', [RU]: 'Корни, тростник и терпение. Природа платит тем, кто слушает.' }, options: [
+        { text: { [EN]: 'I can gather reeds and herbs.', [RU]: 'Соберу тростник и травы.' }, nextNodeId: 'reeds', action: 'give_quest', actionPayload: 'quest_union_reeds' },
+        { text: { [EN]: 'Open herb bench.', [RU]: 'Открыть травный стол.' }, nextNodeId: 'start', action: 'open_merchant', actionPayload: 'merchant_herbalist_vesk' },
+        { text: { [EN]: 'Until next tide.', [RU]: 'До следующего прилива.' }, nextNodeId: null },
+      ] },
+      reeds: { id: 'reeds', text: { [EN]: 'Bring six bundles of swamp weed for emergency kits.', [RU]: 'Принеси шесть пучков болотной травы для аварийных наборов.' }, options: [{ text: { [EN]: 'I will collect them.', [RU]: 'Соберу.' }, nextNodeId: null }] },
+    },
+  },
+  npc_tinker_juno: {
+    id: 'npc_tinker_juno', name: { [EN]: 'Tinker Juno', [RU]: 'Техник Джуно' }, locationId: 'hub_mire_union', defaultNode: 'start',
+    dialogueTree: {
+      start: { id: 'start', text: { [EN]: 'If it can be rebuilt, I can overbuild it.', [RU]: 'Если это можно пересобрать — я могу пересобрать лучше.' }, options: [
+        { text: { [EN]: 'Need salvage from sanctum?', [RU]: 'Нужен лом из святилища?' }, nextNodeId: 'salvage', action: 'give_quest', actionPayload: 'quest_union_machines' },
+        { text: { [EN]: 'Open field workshop.', [RU]: 'Открыть полевой цех.' }, nextNodeId: 'start', action: 'open_merchant', actionPayload: 'merchant_tinker_juno' },
+        { text: { [EN]: 'I will be back.', [RU]: 'Я вернусь.' }, nextNodeId: null },
+      ] },
+      salvage: { id: 'salvage', text: { [EN]: 'I need titan plates and obsidian shards for a siege-breaker prototype.', [RU]: 'Мне нужны титановые пластины и обсидиановые осколки для прототипа осадного разрушителя.' }, options: [{ text: { [EN]: 'I will salvage them.', [RU]: 'Добуду.' }, nextNodeId: null }] },
     },
   },
 };

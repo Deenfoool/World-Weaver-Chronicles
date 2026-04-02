@@ -43,9 +43,9 @@
     }
   },
   "naming": {
-    "example": "lore_line_001.ogg",
-    "format": "line_id.ogg",
+    "example": "lore_line_001.mp3",
+    "format": "line_id.mp3",
     "sampleRate": 44100,
-    "formatAudio": "ogg"
+    "formatAudio": "mp3"
   }
 }

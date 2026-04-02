@@ -7,7 +7,6 @@ type StandingTier = {
   min: number;
   max: number;
   label: { en: string; ru: string };
-  effect: { en: string; ru: string };
   tone: 'good' | 'neutral' | 'bad';
 };
 
@@ -16,35 +15,30 @@ const STANDING_TIERS: StandingTier[] = [
     min: 60,
     max: 100,
     label: { en: 'Trusted Ally', ru: 'Надёжный союзник' },
-    effect: { en: 'Best prices, priority contracts, lower route risk.', ru: 'Лучшие цены, приоритетные контракты, ниже риск маршрутов.' },
     tone: 'good',
   },
   {
     min: 25,
     max: 59,
     label: { en: 'Friendly', ru: 'Дружественный' },
-    effect: { en: 'Moderate discounts and steady market behavior.', ru: 'Умеренные скидки и более стабильный рынок.' },
     tone: 'good',
   },
   {
     min: -24,
     max: 24,
     label: { en: 'Neutral', ru: 'Нейтралитет' },
-    effect: { en: 'Standard prices and standard event pressure.', ru: 'Стандартные цены и обычное давление событий.' },
     tone: 'neutral',
   },
   {
     min: -59,
     max: -25,
     label: { en: 'Unfriendly', ru: 'Недружественный' },
-    effect: { en: 'Higher prices, less favorable event outcomes.', ru: 'Повышенные цены и менее выгодные последствия событий.' },
     tone: 'bad',
   },
   {
     min: -100,
     max: -60,
     label: { en: 'Hostile', ru: 'Враждебный' },
-    effect: { en: 'Trade penalties, retaliation risk, hostile contracts.', ru: 'Торговые штрафы, риск ответных мер, враждебные контракты.' },
     tone: 'bad',
   },
 ];
@@ -53,7 +47,48 @@ function resolveTier(relation: number): StandingTier {
   return STANDING_TIERS.find((tier) => relation >= tier.min && relation <= tier.max) || STANDING_TIERS[2];
 }
 
-function localizeReason(
+function buyRelationMultiplier(relation: number): number {
+  return Math.max(0.82, 1 - relation * 0.0015);
+}
+
+function sellRelationMultiplier(relation: number): number {
+  return 1 + Math.max(0, relation) * 0.0012;
+}
+
+export function tierEffectText(l: 'en' | 'ru', tier: StandingTier): string {
+  const mid = Math.floor((tier.min + tier.max) / 2);
+  const buyPct = Math.round((buyRelationMultiplier(mid) - 1) * 100);
+  const sellPct = Math.round((sellRelationMultiplier(mid) - 1) * 100);
+  if (l === 'ru') {
+    return `По текущим формулам: модификатор покупки ~${buyPct >= 0 ? '+' : ''}${buyPct}%, продажи ~+${Math.max(0, sellPct)}%, вклад в дрейф богатства через relation × 0.08.`;
+  }
+  return `Current formulas: buy modifier ~${buyPct >= 0 ? '+' : ''}${buyPct}%, sell modifier ~+${Math.max(0, sellPct)}%, plus relation × 0.08 contribution to wealth drift.`;
+}
+
+export function localizeConsequenceKind(l: 'en' | 'ru', kind: string): string {
+  const map: Record<string, { en: string; ru: string }> = {
+    retaliation: { en: 'Retaliation', ru: 'Ответные меры' },
+    aid_arrival: { en: 'Aid Arrival', ru: 'Прибытие помощи' },
+    tariff_relief: { en: 'Tariff Relief', ru: 'Снижение тарифов' },
+    smuggler_crackdown: { en: 'Smuggler Crackdown', ru: 'Жёсткий разгон контрабанды' },
+  };
+  return map[kind]?.[l] || kind;
+}
+
+export function localizeOriginType(l: 'en' | 'ru', originType: string): string {
+  const map: Record<string, { en: string; ru: string }> = {
+    war: { en: 'War', ru: 'Война' },
+    caravan_attack: { en: 'Caravan conflict', ru: 'Караванный конфликт' },
+    crisis: { en: 'Crisis', ru: 'Кризис' },
+    prosperity: { en: 'Prosperity', ru: 'Процветание' },
+    black_market_opened: { en: 'Black market', ru: 'Чёрный рынок' },
+    hub_destroyed: { en: 'Hub collapse', ru: 'Крах хаба' },
+    hub_founded: { en: 'Hub founding', ru: 'Основание хаба' },
+  };
+  return map[originType]?.[l] || originType;
+}
+
+export function localizeReason(
   l: 'en' | 'ru',
   key?: string,
   fallback?: string,
@@ -135,7 +170,7 @@ export default function FactionJournalPanel() {
   return (
     <div className="p-4 space-y-5">
       <div className="rounded border border-primary/20 bg-black/30 p-3">
-        <h3 className="font-serif text-primary uppercase tracking-widest text-xs mb-2">
+        <h3 data-tutorial-id="reputation-thresholds" className="font-serif text-primary uppercase tracking-widest text-xs mb-2">
           {l === 'ru' ? 'Пороговые эффекты репутации' : 'Reputation Threshold Effects'}
         </h3>
         <div className="grid grid-cols-1 gap-2 text-[11px]">
@@ -153,7 +188,7 @@ export default function FactionJournalPanel() {
               <p className="text-white">
                 {tier.label[l]} ({tier.min}..{tier.max})
               </p>
-              <p className="text-muted-foreground">{tier.effect[l]}</p>
+              <p className="text-muted-foreground">{tierEffectText(l, tier)}</p>
             </div>
           ))}
         </div>
@@ -203,7 +238,10 @@ export default function FactionJournalPanel() {
                   <p className="text-primary/90">{l === 'ru' ? `тик ${item.dueTick}` : `tick ${item.dueTick}`}</p>
                 </div>
                 <p className="text-muted-foreground mt-1">
-                  {l === 'ru' ? 'Тип' : 'Kind'}: {item.kind} · {l === 'ru' ? 'Интенсивность' : 'Intensity'}: {item.intensity}
+                  {l === 'ru' ? 'Тип' : 'Kind'}: {localizeConsequenceKind(l, item.kind)} · {l === 'ru' ? 'Интенсивность' : 'Intensity'}: {item.intensity}
+                </p>
+                <p className="text-muted-foreground">
+                  {l === 'ru' ? 'Источник' : 'Origin'}: {localizeOriginType(l, item.originType)}
                 </p>
               </div>
             ))}
@@ -229,7 +267,7 @@ export default function FactionJournalPanel() {
                 {tier.tone === 'good' ? <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" /> : tier.tone === 'bad' ? <ShieldAlert className="w-3.5 h-3.5 text-destructive" /> : <Handshake className="w-3.5 h-3.5 text-primary/80" />}
                 <span>{tier.label[l]}</span>
               </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">{tier.effect[l]}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{tierEffectText(l, tier)}</p>
             </div>
           ))}
         </div>

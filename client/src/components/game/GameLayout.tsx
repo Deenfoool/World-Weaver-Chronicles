@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGameStore } from '../../game/store';
 import { LOCATIONS, WEATHER, ITEMS, CLASSES, SKILLS } from '../../game/constants';
 import { Progress } from "@/components/ui/progress";
@@ -18,6 +18,7 @@ import { T } from '../../game/translations';
 import { CharacterCreationBonuses } from '../../game/store';
 import { WorldEconomyEvent } from '../../game/types';
 import { playVoiceText } from '../../game/voice';
+import { playSfx } from '../../game/audio';
 
 type PreloadTask = {
   id: string;
@@ -27,17 +28,20 @@ type PreloadTask = {
 
 type EconomyNotice = {
   id: string;
+  eventType: WorldEconomyEvent['type'];
+  hubId: string;
   title: string;
   body: string;
   tone: 'good' | 'bad' | 'neutral';
-  createdAt: number;
+  createdAtMs: number;
+  expiresAtMs: number;
 };
 
 function buildEconomyNotice(
   event: WorldEconomyEvent,
   lang: 'en' | 'ru',
   resolveHubName: (hubId: string) => string,
-): Omit<EconomyNotice, 'id' | 'createdAt'> | null {
+): Omit<EconomyNotice, 'id' | 'createdAtMs' | 'expiresAtMs' | 'eventType' | 'hubId'> | null {
   const hubName = resolveHubName(event.hubId);
   switch (event.type) {
     case 'hub_founded':
@@ -159,14 +163,9 @@ function buildPreloadTasks(): PreloadTask[] {
       if (!resp || !resp.ok) return;
       const manifest = await resp.json().catch(() => null);
       if (!manifest || typeof manifest !== 'object') return;
-      const paths = Object.values(manifest as Record<string, any>)
-        .flatMap((entry: any) =>
-          Array.isArray(entry)
-            ? entry.map((sub: any) => (typeof sub?.path === 'string' ? sub.path : null))
-            : typeof entry?.path === 'string'
-              ? [entry.path]
-              : [],
-        )
+      const sounds = (manifest as Record<string, any>).sounds;
+      const paths = Object.values((sounds && typeof sounds === 'object') ? sounds : {})
+        .map((entry: any) => (typeof entry?.path === 'string' ? entry.path : null))
         .filter(Boolean)
         .slice(0, 16) as string[];
       await Promise.all(paths.map((p) => preloadAudio(String(p).startsWith('/') ? String(p) : `/${String(p)}`)));
@@ -191,10 +190,29 @@ type CreationQuestion = {
   options: CreationOption[];
 };
 
+type TutorialStepConfig = {
+  id: string;
+  title: string;
+  body: string;
+  details: string[];
+  mobileTab: string;
+  desktopTab: string;
+  selector?: string;
+};
+
+type CombatTutorialButtonStep = {
+  id: string;
+  selector: string;
+  label: string;
+  description: string;
+};
+
 export default function GameLayout() {
-  const { player, loadSave, chooseClass, advanceTutorialStep, skipTutorial, markTutorialHintSeen, currentLocationId, currentWeather, status, settings, worldEconomy } = useGameStore();
+  const { player, gameTime, loadSave, chooseClass, advanceTutorialStep, skipTutorial, markTutorialHintSeen, currentLocationId, currentWeather, status, settings, worldEconomy, startTutorialCombat, stopTutorialCombat } = useGameStore();
   const [activeTab, setActiveTab] = useState('world'); 
   const [desktopTab, setDesktopTab] = useState('character');
+  const prevMobileTabRef = useRef<string | null>(null);
+  const prevDesktopTabRef = useRef<string | null>(null);
   const [introStep, setIntroStep] = useState(0);
   const [creationUnlocked, setCreationUnlocked] = useState(false);
   const [creationStep, setCreationStep] = useState(0);
@@ -206,7 +224,22 @@ export default function GameLayout() {
   const [preloadStarted, setPreloadStarted] = useState(false);
   const [preloadTipIndex, setPreloadTipIndex] = useState(0);
   const [economyNotices, setEconomyNotices] = useState<EconomyNotice[]>([]);
+  const [combatTutorialIndex, setCombatTutorialIndex] = useState(0);
+  const [tutorialAnchorRect, setTutorialAnchorRect] = useState<DOMRect | null>(null);
+  const tutorialCardRef = useRef<HTMLDivElement | null>(null);
+  const [tutorialCardRect, setTutorialCardRect] = useState<{ width: number; height: number }>({ width: 340, height: 280 });
+  const [viewportSize, setViewportSize] = useState<{ width: number; height: number }>(() => ({
+    width: typeof window === 'undefined' ? 1280 : window.innerWidth,
+    height: typeof window === 'undefined' ? 720 : window.innerHeight,
+  }));
+  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768;
+  });
   const l = settings.language;
+  const gameTimeLabel = l === 'ru'
+    ? `День ${gameTime.day}, ${String(gameTime.hour).padStart(2, '0')}:00`
+    : `Day ${gameTime.day}, ${String(gameTime.hour).padStart(2, '0')}:00`;
   const preloadStartedRef = useRef(false);
   const economyEventsBootstrappedRef = useRef(false);
   const seenEconomyEventIdsRef = useRef<Set<string>>(new Set());
@@ -269,6 +302,17 @@ export default function GameLayout() {
   }, [player.classId, player.name, heroNameTouched, heroName.length, l]);
 
   useEffect(() => {
+    const onResize = () => {
+      if (typeof window === 'undefined') return;
+      setIsMobileViewport(window.innerWidth < 768);
+      setViewportSize({ width: window.innerWidth, height: window.innerHeight });
+    };
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
     const events = worldEconomy?.events || [];
     if (!economyEventsBootstrappedRef.current) {
       events.forEach((event) => seenEconomyEventIdsRef.current.add(event.id));
@@ -282,28 +326,52 @@ export default function GameLayout() {
       .map((event) => {
         const base = buildEconomyNotice(event, l, (hubId) => LOCATIONS[hubId]?.name?.[l] || hubId);
         if (!base) return null;
+        const now = Date.now();
         return {
           id: event.id,
+          eventType: event.type,
+          hubId: event.hubId,
           title: base.title,
           body: base.body,
           tone: base.tone,
-          createdAt: Date.now(),
+          createdAtMs: now,
+          expiresAtMs: now + 3000,
         } satisfies EconomyNotice;
       })
       .filter((notice): notice is EconomyNotice => Boolean(notice));
     if (newNotices.length === 0) return;
-    setEconomyNotices((prev) => [...prev, ...newNotices].slice(-4));
+    setEconomyNotices((prev) => {
+      const next = [...prev];
+      newNotices.forEach((notice) => {
+        const now = Date.now();
+        const existingIdx = next.findIndex(
+          (item) => item.hubId === notice.hubId && item.eventType === notice.eventType && item.expiresAtMs > now,
+        );
+        if (existingIdx >= 0) {
+          next[existingIdx] = {
+            ...next[existingIdx],
+            ...notice,
+            expiresAtMs: Math.max(next[existingIdx].expiresAtMs, notice.expiresAtMs),
+          };
+        } else {
+          next.push(notice);
+        }
+      });
+      return next.slice(-4);
+    });
   }, [worldEconomy.events, l]);
 
   useEffect(() => {
     if (economyNotices.length === 0) return;
-    const ttlMs = 9000;
-    const id = window.setInterval(() => {
-      const now = Date.now();
-      setEconomyNotices((prev) => prev.filter((notice) => now - notice.createdAt < ttlMs));
-    }, 800);
-    return () => window.clearInterval(id);
-  }, [economyNotices.length]);
+    const now = Date.now();
+    const nearestExpiry = Math.min(...economyNotices.map((n) => n.expiresAtMs));
+    const delay = Math.max(0, nearestExpiry - now);
+    const timer = window.setTimeout(() => {
+      const current = Date.now();
+      setEconomyNotices((prev) => prev.filter((notice) => notice.expiresAtMs > current));
+    }, delay + 10);
+    return () => window.clearTimeout(timer);
+  }, [economyNotices]);
 
   const location = LOCATIONS[currentLocationId];
   
@@ -320,62 +388,357 @@ export default function GameLayout() {
     </div>
   );
 
-  const tutorialSteps = [
+  const tutorialSteps: TutorialStepConfig[] = [
     {
       id: 'tutorial_welcome',
       title: l === 'ru' ? 'Добро пожаловать в хроники' : 'Welcome to the chronicles',
       body:
         l === 'ru'
-          ? 'Это короткое обучение проведет вас по ключевым экранам: мир, бой, инвентарь и квесты.'
-          : 'This short tutorial guides you through key screens: world, combat, inventory, and quests.',
-      ready: true,
+          ? 'Покажу все основные экраны и кнопки по шагам. Окна будут открываться автоматически.'
+          : 'I will walk through all major screens and buttons step by step, auto-opening each screen.',
+      details: l === 'ru'
+        ? ['Кнопка "Далее" сразу ведет к следующему экрану.', 'Можно пропускать шаг или всё обучение.']
+        : ['The Next button immediately moves to the next screen.', 'You can skip one step or the whole tutorial.'],
+      mobileTab: 'world',
+      desktopTab: 'character',
+      selector: '[data-tutorial-id="nav-world"]',
     },
     {
       id: 'tutorial_world',
-      title: l === 'ru' ? 'Мир и перемещения' : 'World and travel',
+      title: l === 'ru' ? 'Экран мира' : 'World Screen',
       body:
         l === 'ru'
-          ? 'Начните с вкладки мира: исследуйте локацию, общайтесь с NPC и перемещайтесь по карте.'
-          : 'Start in the world tab: explore the location, talk to NPCs, and travel across the map.',
-      ready: status !== 'combat',
+          ? 'Здесь проходит основной геймплей: локация, события, NPC, переходы и контекстные действия.'
+          : 'Main gameplay lives here: location, events, NPCs, travel, and contextual actions.',
+      details: l === 'ru'
+        ? ['Кнопка "Действия" — взаимодействия в текущей точке.', 'Иконка карты в углу — быстрый переход к путешествиям.']
+        : ['Actions opens interactions in the current location.', 'The map icon in the corner quickly opens travel.'],
+      mobileTab: 'world',
+      desktopTab: 'character',
+      selector: '[data-tutorial-id="travel-icon"]',
     },
     {
       id: 'tutorial_combat',
-      title: l === 'ru' ? 'Основы боя' : 'Combat basics',
+      title: l === 'ru' ? 'Боевая панель' : 'Combat Panel',
       body:
         l === 'ru'
-          ? 'В бою следите за энергией, статусами, кулдаунами и контратаками. Попробуйте активный навык.'
-          : 'In combat, track energy, status effects, cooldowns, and counterattacks. Try an active skill.',
-      ready: status === 'combat',
+          ? 'Практический бой: сейчас откроем реальное сражение и разберём каждую кнопку по очереди.'
+          : 'Practical combat: we now open a real fight and explain each button step by step.',
+      details: l === 'ru'
+        ? ['Атака/блок/предмет/навык расходуют энергию.', 'Следите за HP, статусами и кулдаунами — это ключ к победе.']
+        : ['Attack/block/item/skill consume energy.', 'Track HP, statuses, and cooldowns to win consistently.'],
+      mobileTab: 'world',
+      desktopTab: 'character',
+    },
+    {
+      id: 'tutorial_character',
+      title: l === 'ru' ? 'Персонаж' : 'Character',
+      body:
+        l === 'ru'
+          ? 'Экран героя показывает базовые статы, выживаемость и текущую сборку.'
+          : 'The character screen shows your core stats, survivability, and current build.',
+      details: l === 'ru'
+        ? ['Смотрите урон, защиту, энергию и груз.', 'Проверяйте снаряжение и текущие бонусы.']
+        : ['Check damage, defense, energy, and carry load.', 'Review equipment and active stat bonuses.'],
+      mobileTab: 'character',
+      desktopTab: 'character',
+      selector: '[data-tutorial-id="nav-character"]',
     },
     {
       id: 'tutorial_inventory',
-      title: l === 'ru' ? 'Инвентарь и перегруз' : 'Inventory and overload',
+      title: l === 'ru' ? 'Инвентарь' : 'Inventory',
       body:
         l === 'ru'
-          ? 'Откройте инвентарь: используйте фильтры/сортировку и проверяйте слоты зелий/материалов.'
-          : 'Open inventory: use filters/sorting and monitor potion/material slot usage.',
-      ready: activeTab === 'inventory' || desktopTab === 'inventory',
+          ? 'Здесь хранится добыча, расходники и материалы. Управляйте весом и слотами.'
+          : 'This is where loot, consumables, and materials are managed. Watch your carry load and slots.',
+      details: l === 'ru'
+        ? ['Фильтры и сортировка ускоряют поиск предметов.', 'Используйте предметы и следите за перегрузом.']
+        : ['Filters and sorting speed up item management.', 'Use items and keep overload under control.'],
+      mobileTab: 'inventory',
+      desktopTab: 'inventory',
+      selector: '[data-tutorial-id="nav-inventory"]',
     },
     {
       id: 'tutorial_quests',
-      title: l === 'ru' ? 'Квестовый журнал' : 'Quest log',
+      title: l === 'ru' ? 'Задания' : 'Quests',
       body:
         l === 'ru'
-          ? 'Откройте квесты, чтобы отслеживать прогресс, цели и награды цепочек.'
-          : 'Open quests to track progress, objectives, and chain rewards.',
-      ready: activeTab === 'quests' || desktopTab === 'quests',
+          ? 'Журнал заданий показывает активные цели, сроки и награды, включая события экономики.'
+          : 'The quest journal tracks active objectives, timers, and rewards, including economy events.',
+      details: l === 'ru'
+        ? ['Открывайте контракт и выбирайте ветку решения.', 'Сдавайте задания, чтобы менять состояние мира.']
+        : ['Open a contract and choose a branch.', 'Turn in quests to influence world state.'],
+      mobileTab: 'quests',
+      desktopTab: 'quests',
+      selector: '[data-tutorial-id="nav-quests"]',
     },
-  ] as const;
+    {
+      id: 'tutorial_skills',
+      title: l === 'ru' ? 'Навыки' : 'Skills',
+      body:
+        l === 'ru'
+          ? 'Древо навыков определяет боевой стиль персонажа: пассивы, активы и синергии.'
+          : 'The skill tree defines your combat style through passives, actives, and synergies.',
+      details: l === 'ru'
+        ? ['Тратьте очки умений осознанно: сборка важнее случайных кликов.', 'Проверяйте требования и ветки перед изучением.']
+        : ['Spend skill points intentionally; build coherence matters.', 'Check branch requirements before learning.'],
+      mobileTab: 'skills',
+      desktopTab: 'skills',
+    },
+    {
+      id: 'tutorial_crafting',
+      title: l === 'ru' ? 'Ремесло' : 'Crafting',
+      body:
+        l === 'ru'
+          ? 'В ремесле создаются зелья и предметы из найденных материалов и рецептов.'
+          : 'Crafting creates potions and gear from gathered materials and recipes.',
+      details: l === 'ru'
+        ? ['Проверяйте нехватку ингредиентов перед крафтом.', 'Новые рецепты открывают более сильные циклы подготовки.']
+        : ['Check ingredient shortages before crafting.', 'New recipes unlock stronger preparation loops.'],
+      mobileTab: 'crafting',
+      desktopTab: 'crafting',
+    },
+    {
+      id: 'tutorial_reputation',
+      title: l === 'ru' ? 'Репутация' : 'Reputation',
+      body:
+        l === 'ru'
+          ? 'Здесь видно отношение хабов к вам и отложенные последствия решений.'
+          : 'Here you track hub relations and delayed consequences of your choices.',
+      details: l === 'ru'
+        ? ['Следите за порогами репутации — они влияют на экономику.', 'Таймлайн помогает понять, почему меняются цены и риски.']
+        : ['Track reputation thresholds because they impact economy behavior.', 'Timeline explains why prices and risks shift.'],
+      mobileTab: 'reputation',
+      desktopTab: 'reputation',
+      selector: '[data-tutorial-id="reputation-thresholds"]',
+    },
+    {
+      id: 'tutorial_bestiary',
+      title: l === 'ru' ? 'Бестиарий и Кодекс' : 'Bestiary & Codex',
+      body:
+        l === 'ru'
+          ? 'Бестиарий хранит знания о врагах, NPC, локациях и предметах, которые вы уже открыли.'
+          : 'The codex stores knowledge about enemies, NPCs, locations, and discovered items.',
+      details: l === 'ru'
+        ? ['Используйте поиск по разделам.', 'Неизвестные записи откроются после взаимодействий в мире.']
+        : ['Use section search to navigate entries quickly.', 'Unknown entries unlock after world interactions.'],
+      mobileTab: 'bestiary',
+      desktopTab: 'bestiary',
+    },
+    {
+      id: 'tutorial_settings',
+      title: l === 'ru' ? 'Настройки' : 'Settings',
+      body:
+        l === 'ru'
+          ? 'Финальный шаг: язык, озвучка и управление обучением настраиваются здесь.'
+          : 'Final step: language, voice, and tutorial controls are configured here.',
+      details: l === 'ru'
+        ? ['Можно отключить/включить озвучку по каналам.', 'При необходимости перезапустите обучение из настроек.']
+        : ['Voice channels can be toggled independently.', 'You can restart tutorial from settings anytime.'],
+      mobileTab: 'settings',
+      desktopTab: 'settings',
+      selector: '[data-tutorial-id="open-settings"]',
+    },
+    {
+      id: 'tutorial_hub_control',
+      title: l === 'ru' ? 'Управление хабом (Совет)' : 'Hub Control (Council)',
+      body:
+        l === 'ru'
+          ? 'Это окно совета хаба: через него вы вручную влияете на экономику и отношения.'
+          : 'This is the council hub-control modal where you directly influence economy and relations.',
+      details: l === 'ru'
+        ? [
+          '1) Выберите хаб в верхнем списке.',
+          '2) Введите сумму для инвестиции.',
+          '3) Кнопки: Инвест. (рост), Диплом. (отношения), Рейд (давление), Саботаж (дестабилизация).',
+        ]
+        : [
+          '1) Select a hub in the top dropdown.',
+          '2) Enter an investment amount.',
+          '3) Buttons: Invest (growth), Diplomacy (relations), Raid (pressure), Sabotage (destabilization).',
+        ],
+      mobileTab: 'world',
+      desktopTab: 'character',
+    },
+  ];
 
   const tutorial = settings.tutorial;
-  const tutorialStepIndex = Math.max(0, Math.min(4, tutorial.step || 0));
+  const tutorialLastIndex = tutorialSteps.length - 1;
+  const tutorialStepIndex = Math.max(0, Math.min(tutorialLastIndex, tutorial.step || 0));
   const tutorialStep = tutorialSteps[tutorialStepIndex];
-  const showTutorialOverlay = !!player.classId && tutorial.enabled && !tutorial.completed && tutorialStepIndex <= 4;
+  const showTutorialOverlay = !!player.classId && tutorial.enabled && !tutorial.completed && tutorialStepIndex <= tutorialLastIndex;
+  const combatTutorialSteps: CombatTutorialButtonStep[] = [
+    {
+      id: 'attack',
+      selector: '[data-tutorial-id="combat-attack"]',
+      label: l === 'ru' ? 'Атака' : 'Attack',
+      description: l === 'ru'
+        ? 'Основной урон по врагу. Используйте для завершения цепочек и добивания.'
+        : 'Primary damage action. Use it to progress fights and finish enemies.',
+    },
+    {
+      id: 'block',
+      selector: '[data-tutorial-id="combat-block"]',
+      label: l === 'ru' ? 'Блок' : 'Block',
+      description: l === 'ru'
+        ? 'Снижает входящий урон и помогает пережить сильный вражеский ход.'
+        : 'Reduces incoming damage and helps survive heavy enemy turns.',
+    },
+    {
+      id: 'skill',
+      selector: '[data-tutorial-id="combat-skill"]',
+      label: l === 'ru' ? 'Навык' : 'Skill',
+      description: l === 'ru'
+        ? 'Активирует классовые эффекты. Смотрите расход энергии и кулдауны.'
+        : 'Triggers class abilities. Watch energy cost and cooldowns.',
+    },
+    {
+      id: 'item',
+      selector: '[data-tutorial-id="combat-item"]',
+      label: l === 'ru' ? 'Предмет' : 'Item',
+      description: l === 'ru'
+        ? 'Использование зелий/боевых расходников в критический момент.'
+        : 'Use potions and combat consumables at critical moments.',
+    },
+    {
+      id: 'flee',
+      selector: '[data-tutorial-id="combat-flee"]',
+      label: l === 'ru' ? 'Отступление' : 'Flee',
+      description: l === 'ru'
+        ? 'Аварийный выход из боя с риском потерь; применяйте как крайний вариант.'
+        : 'Emergency retreat with penalties; use as a last resort.',
+    },
+    {
+      id: 'combo',
+      selector: '[data-tutorial-id="combat-combo"]',
+      label: l === 'ru' ? 'Комбо' : 'Combo',
+      description: l === 'ru'
+        ? 'Комбо растёт при последовательных агрессивных действиях и увеличивает урон. Срыв темпа обнуляет бонус.'
+        : 'Combo grows through consecutive offensive actions and boosts damage. Losing tempo resets the bonus.',
+    },
+  ];
+  const isCombatTutorialStep = tutorialStep?.id === 'tutorial_combat';
+  const combatTutorialDone = combatTutorialIndex >= combatTutorialSteps.length - 1;
+  const tutorialSelector = showTutorialOverlay
+    ? (isCombatTutorialStep ? combatTutorialSteps[combatTutorialIndex]?.selector : tutorialStep?.selector)
+    : undefined;
 
   useEffect(() => {
     if (!showTutorialOverlay || !tutorialStep) return;
-    if (!tutorialStep.ready) return;
+    if (tutorialStep.mobileTab) setActiveTab(tutorialStep.mobileTab);
+    if (tutorialStep.desktopTab) setDesktopTab(tutorialStep.desktopTab);
+  }, [showTutorialOverlay, tutorialStep]);
+
+  useEffect(() => {
+    if (!isCombatTutorialStep) {
+      setCombatTutorialIndex(0);
+    }
+  }, [isCombatTutorialStep, tutorialStepIndex]);
+
+  useEffect(() => {
+    if (!showTutorialOverlay || !isCombatTutorialStep) return;
+    setActiveTab('world');
+    startTutorialCombat();
+    return () => {
+      stopTutorialCombat();
+    };
+  }, [showTutorialOverlay, isCombatTutorialStep, startTutorialCombat, stopTutorialCombat]);
+
+  useEffect(() => {
+    if (!showTutorialOverlay || !tutorialSelector) {
+      setTutorialAnchorRect(null);
+      return;
+    }
+    const resolveRect = () => {
+      const el = document.querySelector(tutorialSelector) as HTMLElement | null;
+      if (!el) {
+        setTutorialAnchorRect(null);
+        return;
+      }
+      setTutorialAnchorRect(el.getBoundingClientRect());
+    };
+    resolveRect();
+    const id = window.setInterval(resolveRect, 350);
+    return () => window.clearInterval(id);
+  }, [showTutorialOverlay, tutorialSelector, activeTab, desktopTab, isMobileViewport]);
+
+  const handleNextTutorialClick = () => {
+    if (isCombatTutorialStep && !combatTutorialDone) {
+      setCombatTutorialIndex((prev) => Math.min(prev + 1, combatTutorialSteps.length - 1));
+      return;
+    }
+    if (isCombatTutorialStep) stopTutorialCombat();
+    advanceTutorialStep();
+  };
+
+  const handleSkipTutorialStep = () => {
+    if (isCombatTutorialStep) stopTutorialCombat();
+    advanceTutorialStep();
+  };
+
+  const handleSkipTutorialAll = () => {
+    if (isCombatTutorialStep) stopTutorialCombat();
+    skipTutorial();
+  };
+  const tutorialRenderTitle = isCombatTutorialStep
+    ? `${tutorialStep.title}: ${combatTutorialSteps[combatTutorialIndex]?.label || ''}`
+    : tutorialStep.title;
+  const tutorialRenderDetails = isCombatTutorialStep
+    ? [combatTutorialSteps[combatTutorialIndex]?.description || '', ...(tutorialStep.details || [])]
+    : tutorialStep.details;
+
+  useEffect(() => {
+    if (!showTutorialOverlay) return;
+    const el = tutorialCardRef.current;
+    if (!el) return;
+    const updateSize = () => {
+      const rect = el.getBoundingClientRect();
+      setTutorialCardRect({ width: rect.width, height: rect.height });
+    };
+    updateSize();
+    const id = window.setInterval(updateSize, 250);
+    return () => window.clearInterval(id);
+  }, [showTutorialOverlay, tutorialStepIndex, combatTutorialIndex, isMobileViewport]);
+
+  const tutorialCardPosition = useMemo(() => {
+    const margin = 8;
+    const cardW = tutorialCardRect.width || 340;
+    const cardH = tutorialCardRect.height || 280;
+    const vw = viewportSize.width;
+    const vh = viewportSize.height;
+    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+    if (!tutorialAnchorRect) {
+      return {
+        left: clamp(vw - cardW - 12, margin, Math.max(margin, vw - cardW - margin)),
+        top: clamp(88, margin, Math.max(margin, vh - cardH - margin)),
+      };
+    }
+    const candidates = [
+      { left: tutorialAnchorRect.right + 12, top: tutorialAnchorRect.top - 4 },
+      { left: tutorialAnchorRect.left - cardW - 12, top: tutorialAnchorRect.top - 4 },
+      { left: tutorialAnchorRect.left, top: tutorialAnchorRect.bottom + 12 },
+      { left: tutorialAnchorRect.left, top: tutorialAnchorRect.top - cardH - 12 },
+    ].map((pos) => ({
+      left: clamp(pos.left, margin, Math.max(margin, vw - cardW - margin)),
+      top: clamp(pos.top, margin, Math.max(margin, vh - cardH - margin)),
+    }));
+    const intersects = (a: { left: number; top: number; right: number; bottom: number }, b: { left: number; top: number; right: number; bottom: number }) =>
+      !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+    const anchorBox = {
+      left: tutorialAnchorRect.left - 6,
+      top: tutorialAnchorRect.top - 6,
+      right: tutorialAnchorRect.right + 6,
+      bottom: tutorialAnchorRect.bottom + 6,
+    };
+    for (const c of candidates) {
+      const cardBox = { left: c.left, top: c.top, right: c.left + cardW, bottom: c.top + cardH };
+      if (!intersects(cardBox, anchorBox)) return c;
+    }
+    return candidates[0];
+  }, [tutorialAnchorRect, tutorialCardRect, viewportSize]);
+
+  useEffect(() => {
+    if (!showTutorialOverlay || !tutorialStep) return;
     if ((tutorial.seenHints || []).includes(tutorialStep.id)) return;
     markTutorialHintSeen(tutorialStep.id);
   }, [showTutorialOverlay, tutorialStep, tutorial.seenHints, markTutorialHintSeen]);
@@ -417,6 +780,20 @@ export default function GameLayout() {
           : 'From this step on, your story stops being rumor and becomes a mark in the chronicle.\n\nYour answers will shape not just numbers on a hero sheet, but how people speak of you at the gate, in the forge, and by campfire.',
     },
   ];
+
+  useEffect(() => {
+    if (prevMobileTabRef.current !== null && prevMobileTabRef.current !== activeTab) {
+      void playSfx('ui_tab_switch');
+    }
+    prevMobileTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (prevDesktopTabRef.current !== null && prevDesktopTabRef.current !== desktopTab) {
+      void playSfx('ui_tab_switch');
+    }
+    prevDesktopTabRef.current = desktopTab;
+  }, [desktopTab]);
 
   useEffect(() => {
     if (player.classId) return;
@@ -904,8 +1281,21 @@ export default function GameLayout() {
                   {currentWeather === 'snow' && <Snowflake className="w-3.5 h-3.5 text-white" />}
                   {currentWeather === 'fog' && <Cloud className="w-3.5 h-3.5 text-gray-400" />}
                </div>
+               <button
+                 onClick={() => setActiveTab('settings')}
+                 data-tutorial-id="open-settings"
+                 className={`w-6 h-6 rounded border flex items-center justify-center transition-colors ${
+                   activeTab === 'settings'
+                     ? 'bg-primary/20 border-primary/40 text-primary'
+                     : 'bg-black/60 border-white/10 text-muted-foreground'
+                 }`}
+                 aria-label={l === 'ru' ? 'Открыть настройки' : 'Open settings'}
+               >
+                 <SettingsIcon className="w-3.5 h-3.5" />
+               </button>
              </div>
              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{T.stat_level[l]} {player.level}</div>
+             <div className="text-[10px] text-primary/85 uppercase tracking-wider">{gameTimeLabel}</div>
            </div>
         </div>
 
@@ -913,6 +1303,9 @@ export default function GameLayout() {
         <div className="flex-1 relative z-10 overflow-hidden flex flex-col">
            {/* Desktop Top Weather */}
            <div className="hidden md:flex absolute top-0 right-0 p-4 z-50 items-center gap-4">
+             <div className="px-3 py-1.5 rounded border border-primary/25 bg-black/60 text-[11px] uppercase tracking-wider text-primary/90">
+               {gameTimeLabel}
+             </div>
              <div className="flex items-center gap-2 group relative cursor-help">
                 <div className="w-10 h-10 rounded-full bg-black/60 border border-white/10 flex items-center justify-center backdrop-blur-md">
                    {currentWeather === 'clear' && <Sun className="w-5 h-5 text-yellow-400" />}
@@ -969,10 +1362,10 @@ export default function GameLayout() {
            <div className="md:hidden flex-1 h-full overflow-hidden">
              {activeTab === 'world' && renderWorld()}
              {activeTab === 'character' && <ScrollArea className="h-full"><CharacterPanel player={player} l={l} /></ScrollArea>}
-             {activeTab === 'skills' && <ScrollArea className="h-full"><SkillsPanel /></ScrollArea>}
              {activeTab === 'inventory' && <ScrollArea className="h-full"><InventoryPanel /></ScrollArea>}
-             {activeTab === 'crafting' && <ScrollArea className="h-full"><CraftingPanel /></ScrollArea>}
              {activeTab === 'quests' && <ScrollArea className="h-full"><QuestsPanel /></ScrollArea>}
+             {activeTab === 'skills' && <ScrollArea className="h-full"><SkillsPanel /></ScrollArea>}
+             {activeTab === 'crafting' && <ScrollArea className="h-full"><CraftingPanel /></ScrollArea>}
              {activeTab === 'reputation' && <ScrollArea className="h-full"><FactionJournalPanel /></ScrollArea>}
              {activeTab === 'bestiary' && <ScrollArea className="h-full"><BestiaryPanel /></ScrollArea>}
              {activeTab === 'settings' && <ScrollArea className="h-full"><SettingsPanel /></ScrollArea>}
@@ -980,74 +1373,87 @@ export default function GameLayout() {
         </div>
 
         {/* Mobile Bottom Navigation */}
-        <div className="md:hidden shrink-0 bg-card/95 backdrop-blur-xl border-t border-border flex justify-between px-2 relative z-20 pb-2 pt-1 shadow-[0_-4px_24px_rgba(0,0,0,0.5)] overflow-x-auto gap-1">
-           <NavBtn icon={<Swords className="w-4 h-4"/>} label={T.action_explore[l].split(' ')[0]} isActive={activeTab === 'world'} onClick={() => setActiveTab('world')} />
-           <NavBtn icon={<User className="w-4 h-4"/>} label={T.nav_character[l]} isActive={activeTab === 'character'} onClick={() => setActiveTab('character')} />
-           <NavBtn icon={<Star className="w-4 h-4"/>} label={T.nav_skills[l]} isActive={activeTab === 'skills'} onClick={() => setActiveTab('skills')} />
-           <NavBtn icon={<Backpack className="w-4 h-4"/>} label={T.nav_inventory[l]} isActive={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
-           <NavBtn icon={<Hammer className="w-4 h-4"/>} label={T.nav_crafting[l]} isActive={activeTab === 'crafting'} onClick={() => setActiveTab('crafting')} />
-           <NavBtn icon={<MapIcon className="w-4 h-4"/>} label={T.nav_quests[l]} isActive={activeTab === 'quests'} onClick={() => setActiveTab('quests')} />
-           <NavBtn icon={<Scale className="w-4 h-4"/>} label={l === 'ru' ? 'репутация' : 'reputation'} isActive={activeTab === 'reputation'} onClick={() => setActiveTab('reputation')} />
-           <NavBtn icon={<BookMarked className="w-4 h-4"/>} label={l === 'ru' ? 'бестиарий' : 'bestiary'} isActive={activeTab === 'bestiary'} onClick={() => setActiveTab('bestiary')} />
-           <NavBtn icon={<SettingsIcon className="w-4 h-4"/>} label={T.nav_settings[l]} isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+        <div className="md:hidden shrink-0 bg-card/95 backdrop-blur-xl border-t border-border grid grid-cols-4 px-1.5 relative z-20 pb-2 pt-1 shadow-[0_-4px_24px_rgba(0,0,0,0.5)] gap-1">
+           <NavBtn tutorialId="nav-world" icon={<Swords className="w-4 h-4"/>} label={T.action_explore[l].split(' ')[0]} isActive={activeTab === 'world'} onClick={() => setActiveTab('world')} />
+           <NavBtn tutorialId="nav-character" icon={<User className="w-4 h-4"/>} label={T.nav_character[l]} isActive={activeTab === 'character'} onClick={() => setActiveTab('character')} />
+           <NavBtn tutorialId="nav-inventory" icon={<Backpack className="w-4 h-4"/>} label={T.nav_inventory[l]} isActive={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
+           <NavBtn tutorialId="nav-quests" icon={<MapIcon className="w-4 h-4"/>} label={T.nav_quests[l]} isActive={activeTab === 'quests'} onClick={() => setActiveTab('quests')} />
         </div>
 
         {showTutorialOverlay && tutorialStep && (
-          <div className="absolute inset-0 z-[120] pointer-events-none">
-            <div className="absolute inset-0 bg-black/35" />
-            <div className="absolute bottom-4 left-4 right-4 md:left-auto md:right-6 md:bottom-6 md:w-[420px] pointer-events-auto">
-              <div className="rounded-xl border border-primary/30 bg-black/85 backdrop-blur-xl p-4 shadow-2xl">
-                <p className="text-[10px] uppercase tracking-[0.22em] text-primary/80 mb-2">
-                  {l === 'ru' ? `Обучение ${tutorialStepIndex + 1}/5` : `Tutorial ${tutorialStepIndex + 1}/5`}
-                </p>
-                <h3 className="font-serif text-xl text-white mb-2">{tutorialStep.title}</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed mb-4">{tutorialStep.body}</p>
-                {!tutorialStep.ready && (
-                  <p className="text-[11px] text-primary/80 mb-3">
-                    {l === 'ru'
-                      ? 'Чтобы продолжить этот шаг, откройте нужный экран.'
-                      : 'Open the relevant screen to continue this step.'}
+          <>
+            {tutorialAnchorRect && (
+              <div
+                className="pointer-events-none fixed z-[118] rounded-lg border-2 border-primary shadow-[0_0_0_9999px_rgba(0,0,0,0.25)] animate-pulse"
+                style={{
+                  top: tutorialAnchorRect.top - 4,
+                  left: tutorialAnchorRect.left - 4,
+                  width: tutorialAnchorRect.width + 8,
+                  height: tutorialAnchorRect.height + 8,
+                }}
+              />
+            )}
+            <div
+              className="fixed z-[120] w-[min(92vw,360px)] pointer-events-auto"
+              style={{
+                top: tutorialCardPosition.top,
+                left: tutorialCardPosition.left,
+              }}
+            >
+            <div ref={tutorialCardRef} className="rounded-xl border border-primary/30 bg-black/88 backdrop-blur-xl p-4 shadow-2xl">
+              <p className="text-[10px] uppercase tracking-[0.22em] text-primary/80 mb-2">
+                {l === 'ru' ? `Обучение ${tutorialStepIndex + 1}/${tutorialSteps.length}` : `Tutorial ${tutorialStepIndex + 1}/${tutorialSteps.length}`}
+              </p>
+              <h3 className="font-serif text-lg text-white mb-2">{tutorialRenderTitle}</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed mb-3">{tutorialStep.body}</p>
+              <div className="space-y-1.5 mb-4">
+                {tutorialRenderDetails.map((detail, idx) => (
+                  <p key={`${tutorialStep.id}_${idx}`} className="text-[11px] text-primary/85">
+                    • {detail}
                   </p>
-                )}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => advanceTutorialStep()}
-                    disabled={!tutorialStep.ready}
-                    className={`rpg-button px-4 py-2 text-xs ${!tutorialStep.ready ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    {tutorialStepIndex === 4
-                      ? l === 'ru'
-                        ? 'Завершить'
-                        : 'Finish'
-                      : l === 'ru'
-                        ? 'Далее'
-                        : 'Next'}
-                  </button>
-                  <button
-                    onClick={() => advanceTutorialStep()}
-                    className="rpg-button px-4 py-2 text-xs border-white/20 text-white hover:bg-white/10"
-                  >
-                    {l === 'ru' ? 'Пропустить шаг' : 'Skip step'}
-                  </button>
-                  <button
-                    onClick={() => skipTutorial()}
-                    className="rpg-button px-4 py-2 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
-                  >
-                    {l === 'ru' ? 'Пропустить обучение' : 'Skip tutorial'}
-                  </button>
-                </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleNextTutorialClick}
+                  className="rpg-button px-4 py-2 text-xs"
+                >
+                  {isCombatTutorialStep && !combatTutorialDone
+                    ? (l === 'ru' ? 'След. кнопка' : 'Next combat button')
+                    : tutorialStepIndex === tutorialLastIndex
+                    ? l === 'ru'
+                      ? 'Завершить'
+                      : 'Finish'
+                    : l === 'ru'
+                      ? 'Далее'
+                      : 'Next'}
+                </button>
+                <button
+                  onClick={handleSkipTutorialStep}
+                  className="rpg-button px-4 py-2 text-xs border-white/20 text-white hover:bg-white/10"
+                >
+                  {l === 'ru' ? 'Пропустить шаг' : 'Skip step'}
+                </button>
+                <button
+                  onClick={handleSkipTutorialAll}
+                  className="rpg-button px-4 py-2 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
+                >
+                  {l === 'ru' ? 'Пропустить обучение' : 'Skip tutorial'}
+                </button>
               </div>
             </div>
-          </div>
+            </div>
+          </>
         )}
       </main>
     </div>
   );
 }
 
-function NavBtn({ icon, label, isActive, onClick }: any) {
+function NavBtn({ icon, label, isActive, onClick, tutorialId }: any) {
   return (
     <button 
+      data-tutorial-id={tutorialId}
       onClick={onClick} 
       className={`flex flex-col items-center justify-center py-2 gap-1 transition-all ${isActive ? 'text-primary scale-110' : 'text-muted-foreground hover:text-white'}`}
     >

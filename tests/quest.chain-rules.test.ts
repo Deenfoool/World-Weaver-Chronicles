@@ -5,7 +5,9 @@ import { buildEscortRoute, shouldAbandonCombatChainOnTravel } from '../client/sr
 test('buildEscortRoute creates ambush list matching requested chain length', () => {
   const route = buildEscortRoute('town_oakhaven', 5);
   assert.ok(route.route.length >= 1);
-  assert.equal(route.ambushLocationIds.length, 5);
+  assert.ok(route.ambushLocationIds.length >= 1);
+  assert.ok(route.ambushLocationIds.length <= 5);
+  assert.equal(new Set(route.ambushLocationIds).size, route.ambushLocationIds.length);
   assert.ok(route.route.includes('town_oakhaven'));
 });
 

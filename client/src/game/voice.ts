@@ -1,11 +1,14 @@
 import { Language, VoiceChannel } from './types';
 
 let activeUtterance: SpeechSynthesisUtterance | null = null;
+let activeChannel: VoiceChannel | null = null;
 
-export function stopVoicePlayback() {
+export function stopVoicePlayback(channel?: VoiceChannel) {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  if (channel && activeChannel && activeChannel !== channel) return;
   window.speechSynthesis.cancel();
   activeUtterance = null;
+  activeChannel = null;
 }
 
 export function playVoiceText(
@@ -25,6 +28,6 @@ export function playVoiceText(
     window.speechSynthesis.cancel();
   }
   activeUtterance = utterance;
+  activeChannel = channel;
   window.speechSynthesis.speak(utterance);
 }
-

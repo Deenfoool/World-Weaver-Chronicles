@@ -1,10 +1,13 @@
 import { create } from 'zustand';
-import { Player, Quest, GameStateStatus, SaveData, Enemy, Language, WeatherType, DamageType, StatusEffectInstance, StatusEffectType, GameSettings, VoiceChannel, CodexUnlocks, WorldEconomyEvent, WorldEconomyState } from './types';
+import { Player, Quest, GameStateStatus, SaveData, Enemy, Language, WeatherType, DamageType, StatusEffectInstance, StatusEffectType, GameSettings, VoiceChannel, CodexUnlocks, WorldEconomyEvent, WorldEconomyState, GameTimeState } from './types';
 import { INITIAL_QUESTS, LOCATIONS, ENEMIES, ITEMS, ALL_QUESTS, WEATHER, SKILLS, RECIPES, CLASSES, MERCHANTS } from './constants';
 import { getTelegramUserId } from '@/lib/telegram';
 import { ECONOMY_BALANCE } from './economy-balance';
+import { stopVoicePlayback } from './voice';
+import { playSfx } from './audio';
 
 type CombatTarget = 'self' | 'enemy';
+type DayPeriod = 'morning' | 'day' | 'evening' | 'night';
 export interface CharacterCreationBonuses {
   maxHp?: number;
   maxEnergy?: number;
@@ -27,6 +30,7 @@ type CombatEnemy = Enemy & {
 
 interface GameState {
   player: Player;
+  gameTime: GameTimeState;
   currentLocationId: string;
   currentWeather: WeatherType;
   weatherDuration: number;
@@ -77,6 +81,8 @@ interface GameState {
   useSecondWind: () => void;
   flee: () => void;
   endCombat: () => void;
+  startTutorialCombat: () => void;
+  stopTutorialCombat: () => void;
 
   buyItem: (itemId: string, price: number) => void;
   sellItem: (itemId: string, price: number) => void;
@@ -123,9 +129,9 @@ const SAVE_VERSION = 2;
 const DEFAULT_SETTINGS: GameSettings = {
   language: 'en',
   voice: {
-    lore: true,
-    quests: true,
-    npcDialogue: true,
+    lore: false,
+    quests: false,
+    npcDialogue: false,
   },
   tutorial: {
     enabled: true,
@@ -148,11 +154,21 @@ const DESTRUCTION_STREAK_REQUIRED = 4;
 const ECONOMY_EVENT_LIMIT = 16;
 const REPUTATION_LOG_LIMIT = 120;
 const CONSEQUENCE_QUEUE_LIMIT = 40;
+const TUTORIAL_TOTAL_STEPS = 11;
 const ENERGY_COSTS = { attack: 15, flee: 20, item: 10, throw: 12 };
 const COMBO_MAX = 5;
 const ADRENALINE_MAX = 100;
 const SECOND_WIND_COST = 50;
 const FATIGUE_MAX = 100;
+const DEFAULT_GAME_TIME: GameTimeState = {
+  day: 1,
+  hour: 8,
+  totalHours: 8,
+};
+const ANIMAL_ENEMY_IDS = new Set(['wolf', 'frost_wolf', 'swamp_thing']);
+const UNNATURAL_ENEMY_IDS = new Set(['crystal_wisp', 'sentinel_golem', 'stone_revenant', 'mire_siren', 'war_hulk']);
+const HUMANOID_ENEMY_IDS = new Set(['bandit', 'ash_bandit', 'goblin', 'plague_alchemist', 'iron_legionnaire', 'concord_assassin', 'mire_shaman', 'ruin_knight']);
+const TWILIGHT_ENEMY_IDS = new Set(['crystal_wisp', 'mire_siren', 'stone_revenant', 'plague_alchemist']);
 const HUB_BLUEPRINTS = [
   {
     id: 'hub_emberwatch',
@@ -214,6 +230,166 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function normalizeGameTime(input: unknown): GameTimeState {
+  const src = (input || {}) as Partial<GameTimeState>;
+  const totalHours = Number.isFinite(src.totalHours) ? Math.max(0, Math.floor(Number(src.totalHours))) : DEFAULT_GAME_TIME.totalHours;
+  const dayFromTotal = Math.floor(totalHours / 24) + 1;
+  const hourFromTotal = totalHours % 24;
+  const day = Number.isFinite(src.day) ? Math.max(1, Math.floor(Number(src.day))) : dayFromTotal;
+  const hour = Number.isFinite(src.hour) ? clamp(Math.floor(Number(src.hour)), 0, 23) : hourFromTotal;
+  const normalizedTotal = Math.max(totalHours, (day - 1) * 24 + hour);
+  return { day, hour, totalHours: normalizedTotal };
+}
+
+function advanceGameTime(time: GameTimeState, hours: number): GameTimeState {
+  const delta = Math.max(0, Math.floor(hours));
+  if (delta <= 0) return time;
+  const total = time.totalHours + delta;
+  return {
+    day: Math.floor(total / 24) + 1,
+    hour: total % 24,
+    totalHours: total,
+  };
+}
+
+function getDayPeriod(hour: number): DayPeriod {
+  if (hour >= 6 && hour <= 11) return 'morning';
+  if (hour >= 12 && hour <= 17) return 'day';
+  if (hour >= 18 && hour <= 21) return 'evening';
+  return 'night';
+}
+
+function getDayPeriodFromTime(time?: GameTimeState): DayPeriod {
+  if (!time) return 'day';
+  return getDayPeriod(time.hour);
+}
+
+function isUnnaturalEnemy(enemyId: string): boolean {
+  return UNNATURAL_ENEMY_IDS.has(enemyId);
+}
+
+function isHumanoidEnemy(enemyId: string): boolean {
+  return HUMANOID_ENEMY_IDS.has(enemyId);
+}
+
+function isTwilightEnemy(enemyId: string): boolean {
+  return TWILIGHT_ENEMY_IDS.has(enemyId);
+}
+
+function isAnimalEnemy(enemyId: string): boolean {
+  return ANIMAL_ENEMY_IDS.has(enemyId);
+}
+
+function filterEnemiesByDayPeriod(enemyIds: string[], period: DayPeriod): string[] {
+  if (!Array.isArray(enemyIds) || enemyIds.length === 0) return [];
+  if (period === 'morning') {
+    const natural = enemyIds.filter((id) => !isUnnaturalEnemy(id));
+    return natural.length > 0 ? natural : enemyIds;
+  }
+  if (period === 'evening') {
+    const twilight = enemyIds.filter((id) => isTwilightEnemy(id));
+    if (twilight.length > 0) {
+      const mixed = [...enemyIds, ...twilight];
+      return mixed;
+    }
+  }
+  if (period === 'day') {
+    const humanoids = enemyIds.filter((id) => isHumanoidEnemy(id));
+    if (humanoids.length > 0) {
+      return [...enemyIds, ...humanoids, ...humanoids];
+    }
+  }
+  if (period === 'night') {
+    const nonAnimals = enemyIds.filter((id) => !isAnimalEnemy(id));
+    if (nonAnimals.length > 0) return [...enemyIds, ...nonAnimals];
+  }
+  return enemyIds;
+}
+
+function stableHash(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+function isMerchantClosedAtTime(merchantId: string, period: DayPeriod, totalHours: number): boolean {
+  if (period === 'night') return true;
+  if (period === 'evening') {
+    const roll = stableHash(`${merchantId}_${Math.floor(totalHours / 3)}`) % 100;
+    return roll < 35;
+  }
+  return false;
+}
+
+function getEveningRareItemPriceMod(period: DayPeriod, merchantId: string, itemId: string, totalHours: number): number {
+  if (period !== 'evening') return 1;
+  const item = ITEMS[itemId];
+  if (!item || !item.rarity || !['rare', 'epic', 'legendary'].includes(item.rarity)) return 1;
+  const roll = stableHash(`${merchantId}_${itemId}_${Math.floor(totalHours / 2)}`) % 100;
+  if (roll < 30) return 0.86;
+  if (roll > 84) return 1.22;
+  return 1;
+}
+
+function getMajorEconomyEventChance(period: DayPeriod): number {
+  if (period === 'morning') return 0.09;
+  if (period === 'evening') return 0.16;
+  if (period === 'night') return 0.14;
+  return 0.11;
+}
+
+function rollMajorEconomyEvent(period: DayPeriod): 'war' | 'caravan_attack' | 'crisis' | 'prosperity' {
+  const roll = Math.random();
+  if (period === 'morning') {
+    if (roll < 0.18) return 'war';
+    if (roll < 0.34) return 'caravan_attack';
+    if (roll < 0.52) return 'crisis';
+    return 'prosperity';
+  }
+  if (period === 'day') {
+    if (roll < 0.2) return 'war';
+    if (roll < 0.5) return 'caravan_attack';
+    if (roll < 0.68) return 'crisis';
+    return 'prosperity';
+  }
+  if (period === 'evening') {
+    if (roll < 0.34) return 'war';
+    if (roll < 0.62) return 'caravan_attack';
+    if (roll < 0.84) return 'crisis';
+    return 'prosperity';
+  }
+  if (period === 'night') {
+    if (roll < 0.38) return 'war';
+    if (roll < 0.7) return 'caravan_attack';
+    if (roll < 0.94) return 'crisis';
+    return 'prosperity';
+  }
+  if (roll < 0.28) return 'war';
+  if (roll < 0.58) return 'caravan_attack';
+  if (roll < 0.86) return 'crisis';
+  return 'prosperity';
+}
+
+function getDayPeriodEncounterDelta(period: DayPeriod): number {
+  if (period === 'night') return 0.16;
+  if (period === 'morning') return -0.08;
+  if (period === 'evening') return 0.07;
+  return 0.03;
+}
+
+function getDayPeriodLootDelta(period: DayPeriod): number {
+  if (period === 'morning') return 0.08;
+  if (period === 'night') return -0.06;
+  return 0;
+}
+
+function getActiveMerchantIdForLocation(locationId: string): string | null {
+  const merchant = Object.values(MERCHANTS).find((m) => m.locationId === locationId);
+  return merchant?.id || null;
+}
+
 function appendEconomyEvent(
   worldEconomy: WorldEconomyState,
   event: Omit<WorldEconomyEvent, 'id' | 'tick'> & { tick?: number },
@@ -250,8 +426,59 @@ function queueEconomyConsequence(
     ...consequence,
     id: `cons_${consequence.kind}_${consequence.triggerHubId}_${consequence.dueTick}_${Math.floor(Math.random() * 100000)}`,
   };
-  const pendingConsequences = [...(worldEconomy.pendingConsequences || []), next].slice(-CONSEQUENCE_QUEUE_LIMIT);
+  const existing = [...(worldEconomy.pendingConsequences || [])];
+  const dupIndex = existing.findIndex((item) =>
+    item.kind === next.kind
+    && item.triggerHubId === next.triggerHubId
+    && item.targetHubId === next.targetHubId
+    && item.originType === next.originType
+    && item.sourceBranch === next.sourceBranch
+    && Math.abs(item.dueTick - next.dueTick) <= 1,
+  );
+  let pendingConsequences: WorldEconomyState['pendingConsequences'];
+  if (dupIndex >= 0) {
+    const merged = existing[dupIndex];
+    existing[dupIndex] = {
+      ...merged,
+      dueTick: Math.min(merged.dueTick, next.dueTick),
+      intensity: clamp(Math.floor((merged.intensity + next.intensity * 0.7)), 0, 100),
+      contextTag: merged.contextTag || next.contextTag,
+    };
+    pendingConsequences = existing;
+  } else {
+    pendingConsequences = [...existing, next];
+  }
+  pendingConsequences = pendingConsequences.slice(-CONSEQUENCE_QUEUE_LIMIT);
   return { ...worldEconomy, pendingConsequences };
+}
+
+function resolveConsequenceDelay(
+  originType: NonNullable<Quest['eventQuest']>['originType'],
+  kind: WorldEconomyState['pendingConsequences'][number]['kind'],
+): number {
+  if (originType === 'war') {
+    if (kind === 'retaliation') return 1 + Math.floor(Math.random() * 2);
+    if (kind === 'aid_arrival') return 2 + Math.floor(Math.random() * 2);
+    return 2 + Math.floor(Math.random() * 2);
+  }
+  if (originType === 'caravan_attack') {
+    if (kind === 'retaliation') return 1 + Math.floor(Math.random() * 2);
+    if (kind === 'aid_arrival') return 1 + Math.floor(Math.random() * 3);
+    return 2 + Math.floor(Math.random() * 2);
+  }
+  if (originType === 'crisis') {
+    if (kind === 'aid_arrival') return 1 + Math.floor(Math.random() * 2);
+    return 2 + Math.floor(Math.random() * 2);
+  }
+  if (originType === 'prosperity') {
+    if (kind === 'tariff_relief') return 1 + Math.floor(Math.random() * 2);
+    return 2 + Math.floor(Math.random() * 3);
+  }
+  if (originType === 'black_market_opened') {
+    if (kind === 'smuggler_crackdown') return 1 + Math.floor(Math.random() * 2);
+    return 2 + Math.floor(Math.random() * 2);
+  }
+  return 1 + Math.floor(Math.random() * 3);
 }
 
 function resolveHubLevel(wealth: number): number {
@@ -263,7 +490,9 @@ function resolveHubLevel(wealth: number): number {
 }
 
 function resolveHubKind(hubId: string): "faction" | "alliance" | "community" {
-  if (hubId === 'town_oakhaven') return 'faction';
+  if (hubId === 'town_oakhaven' || hubId === 'hub_ironhold') return 'faction';
+  if (hubId === 'hub_sky_consort') return 'alliance';
+  if (hubId === 'hub_mire_union') return 'community';
   if (hubId.startsWith('hub_')) return 'alliance';
   return 'community';
 }
@@ -417,6 +646,12 @@ function updateHubRelation(
   };
 }
 
+function relationStatusFromStrength(strength: number): 'allied' | 'neutral' | 'conflict' {
+  if (strength >= 35) return 'allied';
+  if (strength <= -35) return 'conflict';
+  return 'neutral';
+}
+
 function expandHubsIfEligible(seed: WorldEconomyState) {
   const nextBlueprint = HUB_BLUEPRINTS.find((bp) => !seed.spawnedHubIds.includes(bp.id));
   if (!nextBlueprint) return { worldEconomy: seed, spawnedHubId: null as string | null };
@@ -465,17 +700,22 @@ export function createDefaultWorldEconomy(): WorldEconomyState {
   const hubLocations = Object.values(LOCATIONS)
     .filter((loc) => loc.type === 'hub')
   const hubs = hubLocations.reduce<WorldEconomyState['hubs']>((acc, hub) => {
+      const hubKind = resolveHubKind(hub.id);
+      const factionStart = hubKind === 'faction';
+      const wealth = factionStart ? 600 : 180;
       acc[hub.id] = {
         hubId: hub.id,
-        hubKind: resolveHubKind(hub.id),
-        wealth: 180,
-        level: 1,
-        treasury: 120,
-        tradeTurnover: 80,
-        resources: { food: 45, wood: 40, ore: 30, craft: 35 },
+        hubKind,
+        wealth,
+        level: resolveHubLevel(wealth),
+        treasury: factionStart ? 220 : 120,
+        tradeTurnover: factionStart ? 150 : 80,
+        resources: factionStart
+          ? { food: 60, wood: 55, ore: 52, craft: 48 }
+          : { food: 45, wood: 40, ore: 30, craft: 35 },
         supply: 52,
         demand: 48,
-        stability: 62,
+        stability: factionStart ? 68 : 62,
         playerRelation: 0,
         levelUpStreak: 0,
         levelDownStreak: 0,
@@ -633,15 +873,29 @@ function normalizeWorldEconomy(input: unknown): WorldEconomyState {
         const dueTick = Number.isFinite(src.dueTick) ? Math.max(0, Math.floor(src.dueTick)) : 0;
         const intensity = Number.isFinite(src.intensity) ? clamp(Math.floor(src.intensity), 0, 100) : 40;
         if (typeof src.triggerHubId !== 'string' || src.triggerHubId.length === 0) return null;
+        const originType = typeof src.originType === 'string'
+          && (
+            src.originType === 'war'
+            || src.originType === 'caravan_attack'
+            || src.originType === 'crisis'
+            || src.originType === 'prosperity'
+            || src.originType === 'black_market_opened'
+            || src.originType === 'hub_destroyed'
+            || src.originType === 'hub_founded'
+          )
+          ? src.originType
+          : 'crisis';
         return {
           id: typeof src.id === 'string' && src.id.length > 0 ? src.id : `cons_norm_${idx}`,
           dueTick,
           originQuestId: typeof src.originQuestId === 'string' ? src.originQuestId : `legacy_${idx}`,
+          originType,
           triggerHubId: src.triggerHubId,
           targetHubId: typeof src.targetHubId === 'string' ? src.targetHubId : undefined,
           kind,
           intensity,
           sourceBranch,
+          contextTag: typeof src.contextTag === 'string' ? src.contextTag : undefined,
         } as WorldEconomyState['pendingConsequences'][number];
       })
       .filter((x: WorldEconomyState['pendingConsequences'][number] | null): x is WorldEconomyState['pendingConsequences'][number] => Boolean(x))
@@ -685,8 +939,9 @@ function normalizeWorldEconomy(input: unknown): WorldEconomyState {
   };
 }
 
-export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather: WeatherType): WorldEconomyState {
+export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather: WeatherType, gameTime?: GameTimeState): WorldEconomyState {
   const nextTick = seed.tick + 1;
+  const dayPeriod = getDayPeriodFromTime(gameTime);
   const events = [...(seed.events || [])].slice(-(ECONOMY_EVENT_LIMIT - 6));
   let reputationLog = [...(seed.reputationLog || [])].slice(-REPUTATION_LOG_LIMIT);
   const pendingConsequences = [...(seed.pendingConsequences || [])];
@@ -754,7 +1009,8 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
     }
 
     let blackMarketUntilTick = hub.blackMarketUntilTick;
-    if ((!blackMarketUntilTick || blackMarketUntilTick <= seed.tick) && riskSpikeFromWeather(currentWeather, stability) && Math.random() < 0.08) {
+    const blackMarketChance = dayPeriod === 'night' ? 0.18 : dayPeriod === 'evening' ? 0.12 : dayPeriod === 'morning' ? 0.06 : 0.08;
+    if ((!blackMarketUntilTick || blackMarketUntilTick <= seed.tick) && riskSpikeFromWeather(currentWeather, stability) && Math.random() < blackMarketChance) {
       blackMarketUntilTick = seed.tick + 6 + Math.floor(Math.random() * 5);
       marketMode = 'black_market';
       events.push({
@@ -858,10 +1114,17 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
   }, {});
 
   const activeHubIds = Object.values(hubs).filter((hub) => !hub.destroyed).map((hub) => hub.hubId);
-  if (activeHubIds.length > 0 && Math.random() < 0.24) {
+  const majorTypes: WorldEconomyEvent['type'][] = ['war', 'caravan_attack', 'crisis', 'prosperity'];
+  const recentMajorEvents = (seed.events || []).filter((event) => majorTypes.includes(event.type));
+  const lastGlobalMajorTick = recentMajorEvents.reduce((maxTick, event) => Math.max(maxTick, event.tick), -9999);
+  if (activeHubIds.length > 0 && nextTick - lastGlobalMajorTick >= 2 && Math.random() < getMajorEconomyEventChance(dayPeriod)) {
     const eventHubId = activeHubIds[Math.floor(Math.random() * activeHubIds.length)];
-    const eventRoll = Math.random();
-    if (eventRoll < 0.28) {
+    const lastHubMajorTick = recentMajorEvents
+      .filter((event) => event.hubId === eventHubId)
+      .reduce((maxTick, event) => Math.max(maxTick, event.tick), -9999);
+    if (nextTick - lastHubMajorTick >= 3) {
+      const majorEvent = rollMajorEconomyEvent(dayPeriod);
+      if (majorEvent === 'war') {
       const hub = hubs[eventHubId];
       const warOpponentPool = activeHubIds.filter((id) => id !== eventHubId);
       const warOpponentId = warOpponentPool.length > 0
@@ -887,7 +1150,7 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
         targetHubId: warOpponentId,
         intensity: 72,
       });
-    } else if (eventRoll < 0.52) {
+      } else if (majorEvent === 'caravan_attack') {
       const hub = hubs[eventHubId];
       hubs = {
         ...hubs,
@@ -921,7 +1184,7 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
         hubId: eventHubId,
         intensity: 63,
       });
-    } else if (eventRoll < 0.76) {
+      } else if (majorEvent === 'crisis') {
       const hub = hubs[eventHubId];
       hubs = {
         ...hubs,
@@ -942,7 +1205,7 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
         hubId: eventHubId,
         intensity: 68,
       });
-    } else {
+      } else {
       const hub = hubs[eventHubId];
       hubs = {
         ...hubs,
@@ -964,6 +1227,7 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
         hubId: eventHubId,
         intensity: 49,
       });
+      }
     }
   }
 
@@ -976,22 +1240,40 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
     const relationTargetHub = targetHubId ? hubs[targetHubId] : null;
     const relationKey = targetHubId ? hubRelationKey(cons.triggerHubId, targetHubId) : null;
     const relation = relationKey ? hubRelations[relationKey] : null;
+    const originFactor =
+      cons.originType === 'war'
+        ? 1.25
+        : cons.originType === 'caravan_attack'
+          ? 1.15
+          : cons.originType === 'crisis'
+            ? 1.1
+            : cons.originType === 'prosperity'
+              ? 0.9
+              : cons.originType === 'black_market_opened'
+                ? 1.2
+                : cons.originType === 'hub_destroyed'
+                  ? 1.18
+                  : cons.originType === 'hub_founded'
+                    ? 0.85
+                    : 1;
+    const scaledIntensity = clamp(Math.floor(cons.intensity * originFactor), 0, 100);
     if (cons.kind === 'retaliation') {
       hubs = {
         ...hubs,
         [cons.triggerHubId]: {
           ...triggerHub,
-          stability: clamp(triggerHub.stability - Math.max(3, Math.floor(cons.intensity / 12)), 0, 100),
-          playerRelation: clamp(triggerHub.playerRelation - Math.max(4, Math.floor(cons.intensity / 10)), -100, 100),
-          supply: clamp(triggerHub.supply - 2, 0, 100),
-          demand: clamp(triggerHub.demand + 2, 0, 100),
+          stability: clamp(triggerHub.stability - Math.max(3, Math.floor(scaledIntensity / 12)), 0, 100),
+          playerRelation: clamp(triggerHub.playerRelation - Math.max(4, Math.floor(scaledIntensity / 10)), -100, 100),
+          supply: clamp(triggerHub.supply - (cons.originType === 'caravan_attack' ? 3 : 2), 0, 100),
+          demand: clamp(triggerHub.demand + (cons.originType === 'war' ? 3 : 2), 0, 100),
         },
       };
       if (relation && relationTargetHub) {
+        const nextStrength = clamp(relation.strength - 6, -100, 100);
         hubRelations[relationKey!] = {
           ...relation,
-          strength: clamp(relation.strength - 6, -100, 100),
-          status: clamp(relation.strength - 6, -100, 100) <= -35 ? 'conflict' : relation.status,
+          strength: nextStrength,
+          status: relationStatusFromStrength(nextStrength),
         };
       }
       events.push({
@@ -1000,7 +1282,7 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
         type: 'retaliation',
         hubId: cons.triggerHubId,
         targetHubId,
-        intensity: cons.intensity,
+        intensity: scaledIntensity,
       });
       const nextHub = hubs[cons.triggerHubId];
       if (nextHub && nextHub.playerRelation !== triggerHub.playerRelation) {
@@ -1009,7 +1291,7 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
           tick: nextTick,
           hubId: cons.triggerHubId,
           delta: nextHub.playerRelation - triggerHub.playerRelation,
-          reason: 'Retaliation fallout after earlier conflict choices',
+          reason: `Retaliation fallout after ${cons.originType} choices`,
           reasonKey: 'delay_retaliation',
           source: 'delayed_consequence',
           relatedHubId: targetHubId,
@@ -1020,11 +1302,11 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
         ...hubs,
         [cons.triggerHubId]: {
           ...triggerHub,
-          wealth: clamp(triggerHub.wealth + Math.max(14, Math.floor(cons.intensity / 2)), 0, 1200),
-          stability: clamp(triggerHub.stability + Math.max(3, Math.floor(cons.intensity / 14)), 0, 100),
-          playerRelation: clamp(triggerHub.playerRelation + Math.max(2, Math.floor(cons.intensity / 16)), -100, 100),
-          supply: clamp(triggerHub.supply + 3, 0, 100),
-          demand: clamp(triggerHub.demand - 2, 0, 100),
+          wealth: clamp(triggerHub.wealth + Math.max(14, Math.floor(scaledIntensity / 2)), 0, 1200),
+          stability: clamp(triggerHub.stability + Math.max(3, Math.floor(scaledIntensity / 14)), 0, 100),
+          playerRelation: clamp(triggerHub.playerRelation + Math.max(2, Math.floor(scaledIntensity / 16)), -100, 100),
+          supply: clamp(triggerHub.supply + (cons.originType === 'crisis' ? 4 : 3), 0, 100),
+          demand: clamp(triggerHub.demand - (cons.originType === 'prosperity' ? 1 : 2), 0, 100),
         },
       };
       events.push({
@@ -1032,7 +1314,7 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
         tick: nextTick,
         type: 'aid_arrival',
         hubId: cons.triggerHubId,
-        intensity: cons.intensity,
+        intensity: scaledIntensity,
       });
       const nextHub = hubs[cons.triggerHubId];
       if (nextHub && nextHub.playerRelation !== triggerHub.playerRelation) {
@@ -1041,7 +1323,7 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
           tick: nextTick,
           hubId: cons.triggerHubId,
           delta: nextHub.playerRelation - triggerHub.playerRelation,
-          reason: 'Aid and reconstruction gratitude reached local authorities',
+          reason: `Aid impact after ${cons.originType} narrative`,
           reasonKey: 'delay_aid_arrival',
           source: 'delayed_consequence',
         });
@@ -1051,9 +1333,9 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
         ...hubs,
         [cons.triggerHubId]: {
           ...triggerHub,
-          demand: clamp(triggerHub.demand - 4, 0, 100),
-          stability: clamp(triggerHub.stability + 2, 0, 100),
-          playerRelation: clamp(triggerHub.playerRelation + 2, -100, 100),
+          demand: clamp(triggerHub.demand - (cons.originType === 'war' ? 5 : 4), 0, 100),
+          stability: clamp(triggerHub.stability + (cons.originType === 'prosperity' ? 3 : 2), 0, 100),
+          playerRelation: clamp(triggerHub.playerRelation + (cons.originType === 'war' ? 3 : 2), -100, 100),
         },
       };
       if (relation && relationTargetHub) {
@@ -1070,7 +1352,7 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
         type: 'tariff_relief',
         hubId: cons.triggerHubId,
         targetHubId,
-        intensity: cons.intensity,
+        intensity: scaledIntensity,
       });
       const nextHub = hubs[cons.triggerHubId];
       if (nextHub && nextHub.playerRelation !== triggerHub.playerRelation) {
@@ -1079,7 +1361,7 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
           tick: nextTick,
           hubId: cons.triggerHubId,
           delta: nextHub.playerRelation - triggerHub.playerRelation,
-          reason: 'Tariff relief and diplomatic pressure lowered market tension',
+          reason: `Tariff relief negotiated after ${cons.originType}`,
           reasonKey: 'delay_tariff_relief',
           source: 'delayed_consequence',
           relatedHubId: targetHubId,
@@ -1091,9 +1373,9 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
         [cons.triggerHubId]: {
           ...triggerHub,
           stability: clamp(triggerHub.stability + 2, 0, 100),
-          supply: clamp(triggerHub.supply - 1, 0, 100),
-          demand: clamp(triggerHub.demand + 1, 0, 100),
-          playerRelation: clamp(triggerHub.playerRelation - 2, -100, 100),
+          supply: clamp(triggerHub.supply - (cons.originType === 'black_market_opened' ? 2 : 1), 0, 100),
+          demand: clamp(triggerHub.demand + (cons.originType === 'black_market_opened' ? 2 : 1), 0, 100),
+          playerRelation: clamp(triggerHub.playerRelation - (cons.originType === 'black_market_opened' ? 3 : 2), -100, 100),
         },
       };
       events.push({
@@ -1101,7 +1383,7 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
         tick: nextTick,
         type: 'retaliation',
         hubId: cons.triggerHubId,
-        intensity: cons.intensity,
+        intensity: scaledIntensity,
       });
       const nextHub = hubs[cons.triggerHubId];
       if (nextHub && nextHub.playerRelation !== triggerHub.playerRelation) {
@@ -1110,7 +1392,7 @@ export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather
           tick: nextTick,
           hubId: cons.triggerHubId,
           delta: nextHub.playerRelation - triggerHub.playerRelation,
-          reason: 'Crackdown backlash from smuggler networks',
+          reason: `Smuggler backlash triggered by ${cons.originType}`,
           reasonKey: 'delay_smuggler_backlash',
           source: 'delayed_consequence',
         });
@@ -1191,19 +1473,23 @@ function pickEscortOriginHub(targetHubId: string): string {
 export function buildEscortRoute(targetHubId: string, killCount: number) {
   const originHubId = pickEscortOriginHub(targetHubId);
   const route = findLocationPath(originHubId, targetHubId) || [originHubId, targetHubId];
-  const roadNodes = route.filter((locId) => LOCATIONS[locId]?.type !== 'hub');
-  const ambushLocationIds: string[] = [];
-  for (let i = 0; i < roadNodes.length && ambushLocationIds.length < killCount; i += 1) {
-    ambushLocationIds.push(roadNodes[i]);
-  }
-  let idx = 0;
-  while (ambushLocationIds.length < killCount) {
-    const fallback = route.length > 1
-      ? route[Math.max(1, Math.min(route.length - 2, idx % Math.max(1, route.length - 1)))]
-      : route[0];
-    ambushLocationIds.push(fallback || targetHubId);
-    idx += 1;
-  }
+  const candidateNodes = new Set<string>();
+  route.forEach((locId) => {
+    if (LOCATIONS[locId]?.type !== 'hub') candidateNodes.add(locId);
+    const neighbors = LOCATIONS[locId]?.connectedLocations || [];
+    neighbors.forEach((n) => {
+      if (LOCATIONS[n]?.type !== 'hub') candidateNodes.add(n);
+    });
+  });
+  const prioritized = Array.from(candidateNodes).sort((a, b) => {
+    const ia = route.indexOf(a);
+    const ib = route.indexOf(b);
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+  const ambushLocationIds = prioritized.slice(0, Math.max(1, Math.min(killCount, prioritized.length)));
   return {
     originHubId,
     route,
@@ -1384,7 +1670,7 @@ function applyResist(dmg: number, damageType: DamageType, resistances?: Partial<
   return Math.max(1, Math.floor(dmg * (1 - mod)));
 }
 
-function getCombatStats(player: Player, currentWeather: WeatherType) {
+function getCombatStats(player: Player, currentWeather: WeatherType, gameTime?: GameTimeState) {
   let minDamage = player.stats.baseDamage[0];
   let maxDamage = player.stats.baseDamage[1];
   let defense = player.stats.baseDefense;
@@ -1445,6 +1731,11 @@ function getCombatStats(player: Player, currentWeather: WeatherType) {
     defense = Math.floor(defense * (1 - fatigueFactor * 0.15));
   }
 
+  if (getDayPeriodFromTime(gameTime) === 'night') {
+    minDamage = Math.floor(minDamage * 0.88);
+    maxDamage = Math.floor(maxDamage * 0.88);
+  }
+
   return {
     minDamage: Math.max(1, minDamage),
     maxDamage: Math.max(1, maxDamage),
@@ -1453,6 +1744,67 @@ function getCombatStats(player: Player, currentWeather: WeatherType) {
     counterChance: Math.min(0.5, counterChance),
     damageType,
   };
+}
+
+function enemyIsImmuneToStatus(enemy: CombatEnemy, status: StatusEffectType): boolean {
+  if (!enemy.phases || enemy.phases.length === 0) return false;
+  if (enemy.phaseIndex < 0 || enemy.phaseIndex >= enemy.phases.length) return false;
+  const phase = enemy.phases[enemy.phaseIndex];
+  return Boolean(phase?.statusImmunity?.includes(status));
+}
+
+function getEnemyDodgeChance(player: Player, enemy: CombatEnemy): number {
+  const playerLevel = player.level || 1;
+  const levelDiff = enemy.level - playerLevel;
+  const enemyEnergyRatio = enemy.maxEnergy > 0 ? enemy.energy / enemy.maxEnergy : 0;
+  const roleBonus =
+    enemy.role === 'boss'
+      ? 0.04
+      : enemy.role === 'tank'
+        ? 0.02
+        : enemy.role === 'berserker'
+          ? -0.01
+          : 0;
+  const blockBonus = enemy.isBlocking ? 0.08 : 0;
+  const chance = 0.05 + levelDiff * 0.006 + enemyEnergyRatio * 0.04 + roleBonus + blockBonus;
+  return clamp(chance, 0.01, 0.4);
+}
+
+function getPlayerDodgeChance(player: Player, enemy: CombatEnemy, currentWeather: WeatherType, gameTime?: GameTimeState): number {
+  const playerStats = getCombatStats(player, currentWeather, gameTime);
+  const levelDiff = (player.level || 1) - (enemy.level || 1);
+  const fatigue = getFatigueFactor(player);
+  const overload = getOverloadFactor(player);
+  const energyRatio = player.maxEnergy > 0 ? player.energy / player.maxEnergy : 0;
+  const weatherAdj = currentWeather === 'storm' ? -0.02 : currentWeather === 'fog' ? 0.01 : 0;
+  const nightAdj = getDayPeriodFromTime(gameTime) === 'night' && !isAnimalEnemy(enemy.id) ? -0.01 : 0;
+  const chance = 0.06 + levelDiff * 0.007 + playerStats.defense * 0.003 + energyRatio * 0.06 - fatigue * 0.08 - overload * 0.12 + weatherAdj + nightAdj;
+  return clamp(chance, 0.02, 0.45);
+}
+
+function getPlayerStunChance(state: GameState, enemy: CombatEnemy, source: 'attack' | 'skill' | 'throw'): number {
+  const sourceBase = source === 'skill' ? 0.1 : source === 'throw' ? 0.08 : 0.06;
+  const levelDelta = ((state.player.level || 1) - (enemy.level || 1)) * 0.006;
+  const adrenalineBonus = (state.combatAdrenaline / ADRENALINE_MAX) * 0.05;
+  const fatiguePenalty = getFatigueFactor(state.player) * 0.03;
+  const bossPenalty = enemy.role === 'boss' ? 0.06 : 0;
+  const chance = sourceBase + levelDelta + adrenalineBonus - fatiguePenalty - bossPenalty;
+  return clamp(chance, 0.02, 0.3);
+}
+
+function getEnemyStunChance(player: Player, enemy: CombatEnemy): number {
+  const levelDelta = ((enemy.level || 1) - (player.level || 1)) * 0.007;
+  const guardLevel = player.learnedSkills['guard_master_1'] || 0;
+  const roleBonus =
+    enemy.role === 'boss'
+      ? 0.04
+      : enemy.role === 'berserker'
+        ? 0.03
+        : enemy.role === 'alchemist'
+          ? -0.01
+          : 0;
+  const chance = 0.05 + levelDelta + roleBonus - guardLevel * 0.01;
+  return clamp(chance, 0.01, 0.26);
 }
 
 function rollDamage(range: [number, number]) {
@@ -1900,7 +2252,7 @@ function applyEventQuestBranch(
   };
 }
 
-function buildFollowupEventQuest(resolvedQuest: Quest): Quest | null {
+export function buildFollowupEventQuest(resolvedQuest: Quest): Quest | null {
   if (!resolvedQuest.isEventQuest || !resolvedQuest.eventQuest) return null;
   if (resolvedQuest.id.startsWith('followup_')) return null;
   const branch = resolvedQuest.eventQuest.branch;
@@ -2104,14 +2456,16 @@ function buildFollowupEventQuest(resolvedQuest: Quest): Quest | null {
   return null;
 }
 
-function applyQuestRewards(playerSeed: Player, quest: Quest, lang: Language, logs: string[]) {
+function applyQuestRewards(playerSeed: Player, quest: Quest, lang: Language, logs: string[], rewardMultiplier = 1) {
   let player = { ...playerSeed, inventory: [...playerSeed.inventory] };
-  player.xp += quest.rewards.xp;
-  player.gold += quest.rewards.gold;
+  const xpReward = Math.max(0, Math.round(quest.rewards.xp * rewardMultiplier));
+  const goldReward = Math.max(0, Math.round(quest.rewards.gold * rewardMultiplier));
+  player.xp += xpReward;
+  player.gold += goldReward;
   logs.push(
     lang === 'ru'
-      ? `Награда за задание: ${quest.rewards.xp} XP и ${quest.rewards.gold} золота.`
-      : `Quest reward: ${quest.rewards.xp} XP and ${quest.rewards.gold} gold.`,
+      ? `Награда за задание: ${xpReward} XP и ${goldReward} золота.`
+      : `Quest reward: ${xpReward} XP and ${goldReward} gold.`,
   );
 
   if (quest.rewards.perkId && !(player.questPerks || []).includes(quest.rewards.perkId)) {
@@ -2204,9 +2558,9 @@ export const useGameStore = create<GameState>((set, get) => {
   const normalizeSettings = (input: any): GameSettings => ({
     language: input?.language === 'ru' ? 'ru' : 'en',
     voice: {
-      lore: input?.voice?.lore !== false,
-      quests: input?.voice?.quests !== false,
-      npcDialogue: input?.voice?.npcDialogue !== false,
+      lore: input?.voice?.lore === true,
+      quests: input?.voice?.quests === true,
+      npcDialogue: input?.voice?.npcDialogue === true,
     },
     tutorial: {
       enabled: input?.tutorial?.enabled !== false,
@@ -2299,7 +2653,7 @@ export const useGameStore = create<GameState>((set, get) => {
     if (!state.currentEnemy) return;
 
     const lang = state.settings.language;
-    const playerStats = getCombatStats(state.player, state.currentWeather);
+    const playerStats = getCombatStats(state.player, state.currentWeather, state.gameTime);
     let enemy = { ...state.currentEnemy };
     let player = { ...state.player };
     let combo = state.combatCombo;
@@ -2412,6 +2766,24 @@ export const useGameStore = create<GameState>((set, get) => {
 
     const weatherFx = WEATHER[state.currentWeather].combatEffect;
     if (weatherFx?.enemyDamageMod) hit = Math.floor(hit * weatherFx.enemyDamageMod);
+    if (getDayPeriodFromTime(state.gameTime) === 'night' && !isAnimalEnemy(enemy.id)) {
+      hit = Math.floor(hit * 0.86);
+    }
+
+    const playerDodgeChance = getPlayerDodgeChance(player, enemy, state.currentWeather, state.gameTime) * (state.isPlayerBlocking ? 0.5 : 1);
+    if (Math.random() < playerDodgeChance) {
+      logs.push(lang === 'ru' ? 'Вы уклоняетесь от удара!' : 'You dodge the incoming hit!');
+      adrenaline = Math.min(ADRENALINE_MAX, adrenaline + 4);
+      set({
+        player,
+        currentEnemy: enemy,
+        combatLogs: logs,
+        isPlayerBlocking: false,
+        combatCombo: combo,
+        combatAdrenaline: adrenaline,
+      });
+      return;
+    }
 
     const guardLevel = player.learnedSkills['guard_master_1'] || 0;
     if (state.isPlayerBlocking) {
@@ -2429,6 +2801,11 @@ export const useGameStore = create<GameState>((set, get) => {
     if (enemy.statusInflict && Math.random() <= enemy.statusInflict.chance) {
       player.statusEffects = [...(player.statusEffects || []), { ...enemy.statusInflict, source: enemy.id }];
       logs.push(lang === 'ru' ? `Вы получаете эффект: ${enemy.statusInflict.type}.` : `You are afflicted with ${enemy.statusInflict.type}.`);
+    }
+    const hasNativeStun = enemy.statusInflict?.type === 'stunned';
+    if (!hasNativeStun && Math.random() <= getEnemyStunChance(player, enemy)) {
+      player.statusEffects = [...(player.statusEffects || []), { type: 'stunned', duration: 1, potency: 1, source: enemy.id }];
+      logs.push(lang === 'ru' ? 'Вы оглушены!' : 'You are stunned!');
     }
 
     if (state.isPlayerBlocking && Math.random() <= playerStats.counterChance) {
@@ -2591,6 +2968,7 @@ export const useGameStore = create<GameState>((set, get) => {
 
   return {
     player: STARTING_PLAYER,
+    gameTime: DEFAULT_GAME_TIME,
     currentLocationId: 'town_oakhaven',
     currentWeather: 'clear',
     weatherDuration: 0,
@@ -2621,6 +2999,7 @@ export const useGameStore = create<GameState>((set, get) => {
           },
         },
       }));
+      if (!enabled) stopVoicePlayback(channel);
       get().saveGame();
     },
 
@@ -2640,13 +3019,13 @@ export const useGameStore = create<GameState>((set, get) => {
     advanceTutorialStep: () => {
       set((state) => {
         const nextStep = (state.settings.tutorial.step || 0) + 1;
-        const completed = nextStep >= 5;
+        const completed = nextStep >= TUTORIAL_TOTAL_STEPS;
         return {
           settings: {
             ...state.settings,
             tutorial: {
               ...state.settings.tutorial,
-              step: completed ? 5 : nextStep,
+              step: completed ? TUTORIAL_TOTAL_STEPS : nextStep,
               completed,
             },
           },
@@ -2662,7 +3041,7 @@ export const useGameStore = create<GameState>((set, get) => {
           tutorial: {
             ...state.settings.tutorial,
             completed: true,
-            step: 5,
+            step: TUTORIAL_TOTAL_STEPS,
           },
         },
       }));
@@ -2707,6 +3086,7 @@ export const useGameStore = create<GameState>((set, get) => {
       const loaded = applyClassLoadout({ ...state.player }, classId, bonuses, heroName);
       set({
         player: loaded,
+        gameTime: DEFAULT_GAME_TIME,
         codexUnlocks: normalizeCodexUnlocks(state.codexUnlocks, loaded),
         worldEconomy: normalizeWorldEconomy(state.worldEconomy),
         currentEnemy: null,
@@ -2834,9 +3214,12 @@ export const useGameStore = create<GameState>((set, get) => {
       const quest = state.quests.find((q) => q.id === questId);
       if (!quest || quest.isCompleted || !quest.isTurnInReady) return;
       if (!quest.isEventQuest && (quest.turnInNpcId || quest.giverNpcId) !== npcId) return;
+      const dayPeriod = getDayPeriodFromTime(state.gameTime);
+      const morningOfficialBonus = dayPeriod === 'morning' ? 1.12 : 1;
+      const morningRepDelta = dayPeriod === 'morning' ? 2 : 0;
 
       const logs = [...state.combatLogs];
-      let player = applyQuestRewards(state.player, quest, state.settings.language, logs);
+      let player = applyQuestRewards(state.player, quest, state.settings.language, logs, morningOfficialBonus);
       player = applyLevelUps(player, state.settings.language, logs);
       let codexUnlocks = state.codexUnlocks;
       if (npcId) codexUnlocks = unlockCodex(codexUnlocks, 'npcs', npcId);
@@ -2850,14 +3233,13 @@ export const useGameStore = create<GameState>((set, get) => {
           wealth: Math.max(4, Math.floor(quest.rewards.gold * 0.18)),
           demand: 1,
           stability: 1,
-          playerRelation: 3,
+          playerRelation: 3 + morningRepDelta,
         });
       }
       if (quest.isEventQuest && quest.eventQuest) {
         const targetHubId = quest.eventQuest.targetHubId;
         const otherHubId = quest.eventQuest.opponentHubId;
         const branch = quest.eventQuest.branch;
-        const dueIn = 1 + Math.floor(Math.random() * 3);
         if (
           quest.eventQuest.originType === 'caravan_attack'
           && branch === 'support'
@@ -2884,7 +3266,7 @@ export const useGameStore = create<GameState>((set, get) => {
             });
             worldEconomy = appendReputationLog(worldEconomy, {
               hubId: targetHubId,
-              delta: 9,
+              delta: 9 + morningRepDelta,
               reason: 'Supported local war economy and supply effort',
               reasonKey: 'quest_support',
               source: 'quest_resolution',
@@ -2892,12 +3274,12 @@ export const useGameStore = create<GameState>((set, get) => {
             });
             if (otherHubId && worldEconomy.hubs[otherHubId]) {
               worldEconomy = updateHubEconomy(worldEconomy, otherHubId, {
-                playerRelation: ECONOMY_BALANCE.questResolution.sideRelationPenalty,
+                playerRelation: ECONOMY_BALANCE.questResolution.sideRelationPenalty - morningRepDelta,
                 stability: -2,
               });
               worldEconomy = appendReputationLog(worldEconomy, {
                 hubId: otherHubId,
-                delta: -8,
+                delta: -8 - morningRepDelta,
                 reason: 'Backed opposing side in conflict',
                 reasonKey: 'quest_side_choice',
                 source: 'quest_resolution',
@@ -2905,22 +3287,26 @@ export const useGameStore = create<GameState>((set, get) => {
               });
               worldEconomy = updateHubRelation(worldEconomy, targetHubId, otherHubId, 8);
               worldEconomy = queueEconomyConsequence(worldEconomy, {
-                dueTick: worldEconomy.tick + dueIn,
+                dueTick: worldEconomy.tick + resolveConsequenceDelay(quest.eventQuest.originType, 'retaliation'),
                 originQuestId: quest.id,
+                originType: quest.eventQuest.originType,
                 triggerHubId: otherHubId,
                 targetHubId,
                 kind: 'retaliation',
                 intensity: 58,
                 sourceBranch: branch,
+                contextTag: 'war_side_backlash',
               });
             }
             worldEconomy = queueEconomyConsequence(worldEconomy, {
-              dueTick: worldEconomy.tick + dueIn,
+              dueTick: worldEconomy.tick + resolveConsequenceDelay(quest.eventQuest.originType, 'aid_arrival'),
               originQuestId: quest.id,
+              originType: quest.eventQuest.originType,
               triggerHubId: targetHubId,
               kind: 'aid_arrival',
               intensity: 52,
               sourceBranch: branch,
+              contextTag: 'supported_hub_recovery',
             });
           } else if (branch === 'support_b' && otherHubId && worldEconomy.hubs[otherHubId]) {
             worldEconomy = updateHubEconomy(worldEconomy, otherHubId, {
@@ -2932,19 +3318,19 @@ export const useGameStore = create<GameState>((set, get) => {
             });
             worldEconomy = appendReputationLog(worldEconomy, {
               hubId: otherHubId,
-              delta: 9,
+              delta: 9 + morningRepDelta,
               reason: 'Supported requested side in active war',
               reasonKey: 'quest_side_choice',
               source: 'quest_resolution',
               relatedHubId: targetHubId,
             });
             worldEconomy = updateHubEconomy(worldEconomy, targetHubId, {
-              playerRelation: ECONOMY_BALANCE.questResolution.sideRelationPenalty,
+              playerRelation: ECONOMY_BALANCE.questResolution.sideRelationPenalty - morningRepDelta,
               stability: -2,
             });
             worldEconomy = appendReputationLog(worldEconomy, {
               hubId: targetHubId,
-              delta: -8,
+              delta: -8 - morningRepDelta,
               reason: 'Chose rival side in war',
               reasonKey: 'quest_side_choice',
               source: 'quest_resolution',
@@ -2952,22 +3338,26 @@ export const useGameStore = create<GameState>((set, get) => {
             });
             worldEconomy = updateHubRelation(worldEconomy, targetHubId, otherHubId, 8);
             worldEconomy = queueEconomyConsequence(worldEconomy, {
-              dueTick: worldEconomy.tick + dueIn,
+              dueTick: worldEconomy.tick + resolveConsequenceDelay(quest.eventQuest.originType, 'retaliation'),
               originQuestId: quest.id,
+              originType: quest.eventQuest.originType,
               triggerHubId: targetHubId,
               targetHubId: otherHubId,
               kind: 'retaliation',
               intensity: 58,
               sourceBranch: branch,
+              contextTag: 'war_side_backlash',
             });
             worldEconomy = queueEconomyConsequence(worldEconomy, {
-              dueTick: worldEconomy.tick + dueIn,
+              dueTick: worldEconomy.tick + resolveConsequenceDelay(quest.eventQuest.originType, 'aid_arrival'),
               originQuestId: quest.id,
+              originType: quest.eventQuest.originType,
               triggerHubId: otherHubId,
               targetHubId,
               kind: 'aid_arrival',
               intensity: 52,
               sourceBranch: branch,
+              contextTag: 'supported_hub_recovery',
             });
           } else if (branch === 'neutral') {
             worldEconomy = updateHubEconomy(worldEconomy, targetHubId, {
@@ -2975,7 +3365,7 @@ export const useGameStore = create<GameState>((set, get) => {
             });
             worldEconomy = appendReputationLog(worldEconomy, {
               hubId: targetHubId,
-              delta: -3,
+              delta: -3 - (dayPeriod === 'morning' ? 1 : 0),
               reason: 'Stayed neutral during strategic conflict',
               reasonKey: 'quest_neutral',
               source: 'quest_resolution',
@@ -2987,7 +3377,7 @@ export const useGameStore = create<GameState>((set, get) => {
               });
               worldEconomy = appendReputationLog(worldEconomy, {
                 hubId: otherHubId,
-                delta: -3,
+                delta: -3 - (dayPeriod === 'morning' ? 1 : 0),
                 reason: 'Refused to intervene in conflict',
                 reasonKey: 'quest_neutral',
                 source: 'quest_resolution',
@@ -2995,13 +3385,15 @@ export const useGameStore = create<GameState>((set, get) => {
               });
               worldEconomy = updateHubRelation(worldEconomy, targetHubId, otherHubId, -4);
               worldEconomy = queueEconomyConsequence(worldEconomy, {
-                dueTick: worldEconomy.tick + dueIn,
+                dueTick: worldEconomy.tick + resolveConsequenceDelay(quest.eventQuest.originType, 'tariff_relief'),
                 originQuestId: quest.id,
+                originType: quest.eventQuest.originType,
                 triggerHubId: targetHubId,
                 targetHubId: otherHubId,
                 kind: 'tariff_relief',
                 intensity: 35,
                 sourceBranch: branch,
+                contextTag: 'neutral_trade_compensation',
               });
             }
           } else if (branch === 'punish') {
@@ -3014,18 +3406,23 @@ export const useGameStore = create<GameState>((set, get) => {
             });
             worldEconomy = appendReputationLog(worldEconomy, {
               hubId: targetHubId,
-              delta: -10,
+              delta: -10 - (dayPeriod === 'morning' ? 1 : 0),
               reason: 'Punished hub infrastructure and economic capacity',
               reasonKey: 'quest_punish',
               source: 'quest_resolution',
             });
             worldEconomy = queueEconomyConsequence(worldEconomy, {
-              dueTick: worldEconomy.tick + dueIn,
+              dueTick: worldEconomy.tick + resolveConsequenceDelay(
+                quest.eventQuest.originType,
+                quest.eventQuest.originType === 'black_market_opened' ? 'smuggler_crackdown' : 'retaliation',
+              ),
               originQuestId: quest.id,
+              originType: quest.eventQuest.originType,
               triggerHubId: targetHubId,
               kind: quest.eventQuest.originType === 'black_market_opened' ? 'smuggler_crackdown' : 'retaliation',
               intensity: 62,
               sourceBranch: branch,
+              contextTag: quest.eventQuest.originType === 'caravan_attack' ? 'route_revenge' : 'economic_backlash',
             });
           }
         }
@@ -3045,6 +3442,8 @@ export const useGameStore = create<GameState>((set, get) => {
         }
       }
 
+      void playSfx('ui_reward_claim');
+      void playSfx('coin_jingle', 0.9);
       set({ player, quests, combatLogs: logs, codexUnlocks, worldEconomy });
       get().saveGame();
     },
@@ -3061,13 +3460,15 @@ export const useGameStore = create<GameState>((set, get) => {
       const state = get();
       const currentHubId = state.currentLocationId;
       if (!state.worldEconomy.hubs[hubId]) return;
+      const dayPeriod = getDayPeriodFromTime(state.gameTime);
+      const nightMultiplier = dayPeriod === 'night' ? 1.2 : 1;
       let worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
-        supply: ECONOMY_BALANCE.playerActions.raid.supply,
-        demand: ECONOMY_BALANCE.playerActions.raid.demand,
-        stability: ECONOMY_BALANCE.playerActions.raid.stability,
-        playerRelation: ECONOMY_BALANCE.playerActions.raid.relation,
-        wealth: ECONOMY_BALANCE.playerActions.raid.wealth,
-        tradeTurnover: ECONOMY_BALANCE.playerActions.raid.turnover,
+        supply: Math.floor(ECONOMY_BALANCE.playerActions.raid.supply * nightMultiplier),
+        demand: Math.floor(ECONOMY_BALANCE.playerActions.raid.demand * nightMultiplier),
+        stability: Math.floor(ECONOMY_BALANCE.playerActions.raid.stability * nightMultiplier),
+        playerRelation: Math.floor(ECONOMY_BALANCE.playerActions.raid.relation * nightMultiplier),
+        wealth: Math.floor(ECONOMY_BALANCE.playerActions.raid.wealth * nightMultiplier),
+        tradeTurnover: Math.floor(ECONOMY_BALANCE.playerActions.raid.turnover * nightMultiplier),
       });
       if (state.worldEconomy.hubs[currentHubId] && currentHubId !== hubId) {
         worldEconomy = updateHubRelation(worldEconomy, currentHubId, hubId, -10);
@@ -3087,7 +3488,7 @@ export const useGameStore = create<GameState>((set, get) => {
         type: 'player_raid',
         hubId,
         targetHubId: currentHubId !== hubId ? currentHubId : undefined,
-        intensity: 61,
+        intensity: clamp(Math.floor(61 * nightMultiplier), 20, 95),
       });
       const withLog = appendReputationLog(withEvent, {
         hubId,
@@ -3136,9 +3537,11 @@ export const useGameStore = create<GameState>((set, get) => {
       const state = get();
       const currentHubId = state.currentLocationId;
       if (!state.worldEconomy.hubs[hubId]) return;
+      const dayPeriod = getDayPeriodFromTime(state.gameTime);
+      const morningBonus = dayPeriod === 'morning' ? 2 : 0;
       let worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
         stability: ECONOMY_BALANCE.playerActions.diplomacy.stability,
-        playerRelation: ECONOMY_BALANCE.playerActions.diplomacy.relation,
+        playerRelation: ECONOMY_BALANCE.playerActions.diplomacy.relation + morningBonus,
       });
       if (state.worldEconomy.hubs[currentHubId] && currentHubId !== hubId) {
         worldEconomy = updateHubRelation(worldEconomy, currentHubId, hubId, ECONOMY_BALANCE.playerActions.diplomacy.relationLinkDelta);
@@ -3151,7 +3554,7 @@ export const useGameStore = create<GameState>((set, get) => {
       });
       const withLog = appendReputationLog(withEvent, {
         hubId,
-        delta: 6,
+        delta: 6 + morningBonus,
         reason: 'You negotiated diplomatic concessions',
         reasonKey: 'player_diplomacy',
         source: 'player_action',
@@ -3164,18 +3567,20 @@ export const useGameStore = create<GameState>((set, get) => {
     sabotageHub: (hubId) => {
       const state = get();
       if (!state.worldEconomy.hubs[hubId]) return;
+      const dayPeriod = getDayPeriodFromTime(state.gameTime);
+      const nightMultiplier = dayPeriod === 'night' ? 1.18 : 1;
       const worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
-        wealth: ECONOMY_BALANCE.playerActions.sabotage.wealth,
-        stability: ECONOMY_BALANCE.playerActions.sabotage.stability,
-        supply: ECONOMY_BALANCE.playerActions.sabotage.supply,
-        demand: ECONOMY_BALANCE.playerActions.sabotage.demand,
-        playerRelation: ECONOMY_BALANCE.playerActions.sabotage.relation,
-        tradeTurnover: ECONOMY_BALANCE.playerActions.sabotage.turnover,
+        wealth: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.wealth * nightMultiplier),
+        stability: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.stability * nightMultiplier),
+        supply: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.supply * nightMultiplier),
+        demand: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.demand * nightMultiplier),
+        playerRelation: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.relation * nightMultiplier),
+        tradeTurnover: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.turnover * nightMultiplier),
       });
       const withEvent = appendEconomyEvent(worldEconomy, {
         type: 'player_sabotage',
         hubId,
-        intensity: 74,
+        intensity: clamp(Math.floor(74 * nightMultiplier), 24, 98),
       });
       const withLog = appendReputationLog(withEvent, {
         hubId,
@@ -3210,6 +3615,7 @@ export const useGameStore = create<GameState>((set, get) => {
         if (loadedPlayer.carryCapacity === undefined) loadedPlayer.carryCapacity = 35;
         set({
           player: loadedPlayer,
+          gameTime: normalizeGameTime(data.gameTime),
           currentLocationId: data.currentLocationId,
           currentWeather: data.currentWeather || 'clear',
           weatherDuration: data.weatherDuration || 0,
@@ -3256,6 +3662,7 @@ export const useGameStore = create<GameState>((set, get) => {
       const saveData: SaveData = {
         saveVersion: SAVE_VERSION,
         player: state.player,
+        gameTime: state.gameTime,
         currentLocationId: state.currentLocationId,
         currentWeather: state.currentWeather,
         weatherDuration: state.weatherDuration,
@@ -3276,6 +3683,7 @@ export const useGameStore = create<GameState>((set, get) => {
     resetGame: () => {
       set({
         player: { ...STARTING_PLAYER },
+        gameTime: DEFAULT_GAME_TIME,
         currentLocationId: 'town_oakhaven',
         currentWeather: 'clear',
         weatherDuration: 5,
@@ -3298,6 +3706,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     travelTo: (locationId) => {
+      void playSfx('travel_whoosh_short');
       get().tickWeather();
       const state = get();
       const activeChain = findAnyActiveCombatChainQuest(state.quests);
@@ -3323,15 +3732,18 @@ export const useGameStore = create<GameState>((set, get) => {
       const freshState = get();
       const targetLoc = LOCATIONS[locationId];
       const lang = freshState.settings.language;
+      const nextGameTime = advanceGameTime(freshState.gameTime, 4);
+      const dayPeriod = getDayPeriodFromTime(nextGameTime);
       let player = { ...freshState.player };
       let codexUnlocks = unlockCodex(freshState.codexUnlocks, 'locations', locationId);
-      let worldEconomy = simulateWorldEconomyTick(freshState.worldEconomy, freshState.currentWeather);
+      let worldEconomy = simulateWorldEconomyTick(freshState.worldEconomy, freshState.currentWeather, nextGameTime);
       const expansion = expandHubsIfEligible(worldEconomy);
       worldEconomy = expansion.worldEconomy;
       const questsWithEvents = withGeneratedEventQuests(freshState.quests, worldEconomy);
       let encounterChance = 0.3;
       const weatherFx = WEATHER[state.currentWeather].exploreEffect;
       if (weatherFx?.encounterChanceMod) encounterChance += weatherFx.encounterChanceMod;
+      encounterChance += getDayPeriodEncounterDelta(dayPeriod);
 
       const wasDiscovered = (player.discoveredLocations || []).includes(locationId);
       const travelFatigueGain = targetLoc.type === 'hub' ? 4 : 8;
@@ -3409,9 +3821,11 @@ export const useGameStore = create<GameState>((set, get) => {
       });
       const nextQuests = syncQuestStates(escortAdjustedQuests, player);
 
+      const periodEnemyPoolRaw = filterEnemiesByDayPeriod(targetLoc.possibleEnemies || [], dayPeriod);
+      const periodEnemyPool = periodEnemyPoolRaw.length > 0 ? periodEnemyPoolRaw : (targetLoc.possibleEnemies || []);
       const enemyTemplate = forcedAmbushEnemy
         || (targetLoc.possibleEnemies && Math.random() < encounterChance
-          ? ENEMIES[targetLoc.possibleEnemies[Math.floor(Math.random() * targetLoc.possibleEnemies.length)]]
+          ? ENEMIES[periodEnemyPool[Math.floor(Math.random() * periodEnemyPool.length)]]
           : null);
       if (enemyTemplate) {
         const enemyId = enemyTemplate.id;
@@ -3438,7 +3852,7 @@ export const useGameStore = create<GameState>((set, get) => {
         if (targetLoc.type === 'hub') {
           worldEconomy = updateHubEconomy(worldEconomy, locationId, { wealth: 6, stability: 1, playerRelation: 1 });
         }
-        set({ player, currentLocationId: locationId, status: 'combat', currentEnemy: buildEnemy(enemyTemplate), combatLogs: logs, isPlayerBlocking: false, quests: nextQuests, codexUnlocks, worldEconomy, combatCombo: 0, combatAdrenaline: 0 });
+        set({ player, gameTime: nextGameTime, currentLocationId: locationId, status: 'combat', currentEnemy: buildEnemy(enemyTemplate), combatLogs: logs, isPlayerBlocking: false, quests: nextQuests, codexUnlocks, worldEconomy, combatCombo: 0, combatAdrenaline: 0 });
       } else {
         const logs = !wasDiscovered
           ? [lang === 'ru' ? `Открыта новая локация: ${targetLoc.name[lang]} (+30 XP, +18 золота).` : `Discovered new location: ${targetLoc.name[lang]} (+30 XP, +18 gold).`]
@@ -3455,7 +3869,7 @@ export const useGameStore = create<GameState>((set, get) => {
         if (targetLoc.type === 'hub') {
           worldEconomy = updateHubEconomy(worldEconomy, locationId, { wealth: 8, stability: 1, playerRelation: 1 });
         }
-        set({ player, currentLocationId: locationId, status: targetLoc.type === 'hub' ? 'hub' : 'exploring', quests: nextQuests, codexUnlocks, worldEconomy, combatLogs: logs.length > 0 ? logs : freshState.combatLogs });
+        set({ player, gameTime: nextGameTime, currentLocationId: locationId, status: targetLoc.type === 'hub' ? 'hub' : 'exploring', quests: nextQuests, codexUnlocks, worldEconomy, combatLogs: logs.length > 0 ? logs : freshState.combatLogs });
       }
       get().saveGame();
     },
@@ -3465,6 +3879,8 @@ export const useGameStore = create<GameState>((set, get) => {
       const state = get();
       const loc = LOCATIONS[state.currentLocationId];
       if (loc.type === 'hub') return;
+      const nextGameTime = advanceGameTime(state.gameTime, 2);
+      const dayPeriod = getDayPeriodFromTime(nextGameTime);
       const chainQuest = findActiveCombatChainQuest(state.quests, state.currentLocationId);
       const pendingChainGoal = chainQuest?.goals.find((g) => g.type === 'kill' && g.currentCount < g.targetCount);
       if (pendingChainGoal) {
@@ -3472,6 +3888,7 @@ export const useGameStore = create<GameState>((set, get) => {
         if (forcedEnemy) {
           const lang = state.settings.language;
           set({
+            gameTime: nextGameTime,
             status: 'combat',
             currentEnemy: buildEnemy(forcedEnemy),
             combatLogs: [
@@ -3489,7 +3906,7 @@ export const useGameStore = create<GameState>((set, get) => {
       }
       const fatigueFactor = getFatigueFactor(state.player);
       let codexUnlocks = unlockCodex(state.codexUnlocks, 'locations', state.currentLocationId);
-      let worldEconomy = simulateWorldEconomyTick(state.worldEconomy, state.currentWeather);
+      let worldEconomy = simulateWorldEconomyTick(state.worldEconomy, state.currentWeather, nextGameTime);
       const expansion = expandHubsIfEligible(worldEconomy);
       worldEconomy = expansion.worldEconomy;
       const questsWithEvents = withGeneratedEventQuests(state.quests, worldEconomy);
@@ -3500,6 +3917,8 @@ export const useGameStore = create<GameState>((set, get) => {
       const weatherFx = WEATHER[state.currentWeather].exploreEffect;
       if (weatherFx?.encounterChanceMod) encounterChance += weatherFx.encounterChanceMod;
       if (weatherFx?.lootChanceMod) lootChance += weatherFx.lootChanceMod;
+      encounterChance += getDayPeriodEncounterDelta(dayPeriod);
+      lootChance += getDayPeriodLootDelta(dayPeriod);
       encounterChance += fatigueFactor * 0.1;
       lootChance -= fatigueFactor * 0.15;
       const scavLevel = state.player.learnedSkills['scavenger_1'] || 0;
@@ -3510,15 +3929,17 @@ export const useGameStore = create<GameState>((set, get) => {
         if (lootId === 'gold') {
           const amount = Math.floor(Math.random() * 10) + 1;
           const player = { ...state.player, gold: state.player.gold + amount, fatigue: Math.min(FATIGUE_MAX, (state.player.fatigue || 0) + 6) };
-          set({ player, quests: syncQuestStates(questsWithEvents, player), codexUnlocks, worldEconomy });
+          set({ player, gameTime: nextGameTime, quests: syncQuestStates(questsWithEvents, player), codexUnlocks, worldEconomy });
         } else {
           codexUnlocks = unlockCodex(codexUnlocks, 'items', lootId);
           const player = addItem(state.player, lootId, 1).player;
           player.fatigue = Math.min(FATIGUE_MAX, (player.fatigue || 0) + 6);
-          set({ player, quests: syncQuestStates(questsWithEvents, player), codexUnlocks, worldEconomy });
+          set({ player, gameTime: nextGameTime, quests: syncQuestStates(questsWithEvents, player), codexUnlocks, worldEconomy });
         }
       } else if (loc.possibleEnemies && Math.random() < encounterChance) {
-        const enemyId = loc.possibleEnemies[Math.floor(Math.random() * loc.possibleEnemies.length)];
+        const periodEnemyPoolRaw = filterEnemiesByDayPeriod(loc.possibleEnemies, dayPeriod);
+        const periodEnemyPool = periodEnemyPoolRaw.length > 0 ? periodEnemyPoolRaw : loc.possibleEnemies;
+        const enemyId = periodEnemyPool[Math.floor(Math.random() * periodEnemyPool.length)];
         const enemyTemplate = ENEMIES[enemyId];
         codexUnlocks = unlockCodex(codexUnlocks, 'enemies', enemyId);
         const lang = state.settings.language;
@@ -3530,6 +3951,7 @@ export const useGameStore = create<GameState>((set, get) => {
           : encounterMsg;
         set({
           player: { ...state.player, fatigue: Math.min(FATIGUE_MAX, (state.player.fatigue || 0) + 6) },
+          gameTime: nextGameTime,
           status: 'combat',
           currentEnemy: buildEnemy(enemyTemplate),
           combatLogs: [logMsg],
@@ -3548,6 +3970,7 @@ export const useGameStore = create<GameState>((set, get) => {
             skillPoints: state.player.skillPoints + 1 + bonusSkill,
             fatigue: Math.min(FATIGUE_MAX, (state.player.fatigue || 0) + 5),
           },
+          gameTime: nextGameTime,
           quests: syncQuestStates(questsWithEvents, state.player),
           codexUnlocks,
           worldEconomy,
@@ -3558,6 +3981,7 @@ export const useGameStore = create<GameState>((set, get) => {
             ...state.player,
             fatigue: Math.min(FATIGUE_MAX, (state.player.fatigue || 0) + 4),
           },
+          gameTime: nextGameTime,
           quests: syncQuestStates(questsWithEvents, state.player),
           codexUnlocks,
           worldEconomy,
@@ -3616,13 +4040,22 @@ export const useGameStore = create<GameState>((set, get) => {
         });
         return;
       }
+      const hoursToMorning = ((24 - state.gameTime.hour + 6) % 24) || 24;
+      const nextGameTime = advanceGameTime(state.gameTime, hoursToMorning);
+      const isFieldRest = LOCATIONS[state.currentLocationId]?.type !== 'hub';
+      const isNightRest = isFieldRest && getDayPeriodFromTime(state.gameTime) === 'night';
       set((state) => ({
         player: {
           ...state.player,
-          hp: state.player.maxHp,
-          energy: state.player.maxEnergy,
-          fatigue: Math.max(0, (state.player.fatigue || 0) - 45),
+          hp: isNightRest
+            ? Math.min(state.player.maxHp, state.player.hp + Math.floor((state.player.maxHp - state.player.hp) * 0.72))
+            : state.player.maxHp,
+          energy: isNightRest
+            ? Math.min(state.player.maxEnergy, state.player.energy + Math.floor((state.player.maxEnergy - state.player.energy) * 0.72))
+            : state.player.maxEnergy,
+          fatigue: Math.max(0, (state.player.fatigue || 0) - (isNightRest ? 25 : 45)),
         },
+        gameTime: nextGameTime,
       }));
       get().saveGame();
     },
@@ -3636,7 +4069,29 @@ export const useGameStore = create<GameState>((set, get) => {
         return;
       }
 
-      const stats = getCombatStats(state.player, state.currentWeather);
+      const stats = getCombatStats(state.player, state.currentWeather, state.gameTime);
+      let enemy = { ...state.currentEnemy, isBlocking: false };
+      const player = { ...state.player, energy: Math.max(0, state.player.energy - ENERGY_COSTS.attack) };
+      const dodgeChance = getEnemyDodgeChance(player, enemy);
+      if (Math.random() < dodgeChance) {
+        const logs = [
+          ...state.combatLogs,
+          lang === 'ru'
+            ? `${state.currentEnemy.name[lang]} уклоняется от атаки.`
+            : `${state.currentEnemy.name[lang]} dodges your attack.`,
+        ];
+        set({
+          player,
+          currentEnemy: enemy,
+          combatLogs: logs,
+          isPlayerBlocking: false,
+          combatStyle: { ...state.combatStyle, attack: state.combatStyle.attack + 1 },
+          combatCombo: 0,
+          combatAdrenaline: Math.max(0, state.combatAdrenaline - 3),
+        });
+        enemyTurn(logs);
+        return;
+      }
       const baseDamage = rollDamage([stats.minDamage, stats.maxDamage]);
       const isCrit = Math.random() <= stats.critChance;
       const critMult = isCrit ? 1.6 : 1;
@@ -3644,8 +4099,7 @@ export const useGameStore = create<GameState>((set, get) => {
       let finalDamage = Math.max(1, Math.floor(baseDamage * critMult * comboBonus * (state.currentEnemy.isBlocking ? 0.45 : 1)));
       finalDamage = applyResist(finalDamage, stats.damageType, state.currentEnemy.resistances);
       finalDamage = Math.floor(finalDamage / (state.currentEnemy.defenseMod || 1));
-      const enemy = { ...state.currentEnemy, hp: Math.max(0, state.currentEnemy.hp - finalDamage), isBlocking: false };
-      const player = { ...state.player, energy: Math.max(0, state.player.energy - ENERGY_COSTS.attack) };
+      enemy = { ...enemy, hp: Math.max(0, state.currentEnemy.hp - finalDamage) };
       const logs = [
         ...state.combatLogs,
         lang === 'ru'
@@ -3657,6 +4111,10 @@ export const useGameStore = create<GameState>((set, get) => {
       if (weapon?.stats?.statusOnHit && Math.random() <= weapon.stats.statusOnHit.chance) {
         enemy.statusEffects = [...enemy.statusEffects, { ...weapon.stats.statusOnHit, source: weapon.id }];
         logs.push(lang === 'ru' ? `Наложен эффект: ${weapon.stats.statusOnHit.type}.` : `Applied status: ${weapon.stats.statusOnHit.type}.`);
+      }
+      if (!enemyIsImmuneToStatus(enemy, 'stunned') && Math.random() <= getPlayerStunChance(state, enemy, 'attack')) {
+        enemy.statusEffects = [...enemy.statusEffects, { type: 'stunned', duration: 1, potency: 1, source: 'combat_attack' }];
+        logs.push(lang === 'ru' ? 'Цель оглушена!' : 'Target is stunned!');
       }
 
       if (enemy.hp <= 0) {
@@ -3707,10 +4165,37 @@ export const useGameStore = create<GameState>((set, get) => {
       const cost = skill.effect.energyCost || 0;
       if (state.player.energy < cost) return;
 
-      const baseStats = getCombatStats(state.player, state.currentWeather);
+      const baseStats = getCombatStats(state.player, state.currentWeather, state.gameTime);
       const scale = skill.effect.damageScale || 1;
       const dmgType = skill.effect.damageType || baseStats.damageType;
       const comboBonus = 1 + Math.min(COMBO_MAX, state.combatCombo) * 0.06;
+      let player = { ...state.player, energy: state.player.energy - cost, cooldowns: { ...(state.player.cooldowns || {}) } };
+      player.cooldowns![skillId] = skill.effect.cooldownTurns || 1;
+      let enemy = { ...state.currentEnemy, isBlocking: false };
+      const logs = [
+        ...state.combatLogs,
+      ];
+
+      const dodgeChance = getEnemyDodgeChance(player, enemy);
+      if (Math.random() < dodgeChance) {
+        logs.push(
+          state.settings.language === 'ru'
+            ? `${enemy.name.ru} уклоняется от навыка ${skill.name.ru}.`
+            : `${enemy.name.en} dodges your ${skill.name.en}.`,
+        );
+        set({
+          player,
+          currentEnemy: enemy,
+          combatLogs: logs,
+          isPlayerBlocking: false,
+          combatStyle: { ...state.combatStyle, skill: state.combatStyle.skill + 1 },
+          combatCombo: 0,
+          combatAdrenaline: Math.max(0, state.combatAdrenaline - 2),
+        });
+        enemyTurn(logs);
+        return;
+      }
+
       let damage = Math.max(1, Math.floor(rollDamage([baseStats.minDamage, baseStats.maxDamage]) * scale * comboBonus));
       damage = applyResist(damage, dmgType, state.currentEnemy.resistances);
 
@@ -3719,19 +4204,20 @@ export const useGameStore = create<GameState>((set, get) => {
         if (hasBleed) damage = Math.floor(damage * 1.25);
       }
 
-      let enemy = { ...state.currentEnemy, hp: Math.max(0, state.currentEnemy.hp - damage), isBlocking: false };
-      let player = { ...state.player, energy: state.player.energy - cost, cooldowns: { ...(state.player.cooldowns || {}) } };
-      player.cooldowns![skillId] = skill.effect.cooldownTurns || 1;
-      const logs = [
-        ...state.combatLogs,
+      enemy = { ...enemy, hp: Math.max(0, state.currentEnemy.hp - damage) };
+      logs.push(
         state.settings.language === 'ru'
           ? `Вы используете ${skill.name.ru} и наносите ${damage} урона.`
           : `You use ${skill.name.en} and deal ${damage} damage.`,
-      ];
+      );
 
       if (skill.effect.appliesStatus && Math.random() <= skill.effect.appliesStatus.chance) {
         enemy.statusEffects = [...enemy.statusEffects, { ...skill.effect.appliesStatus, source: skill.id }];
         logs.push(state.settings.language === 'ru' ? `Наложен эффект: ${skill.effect.appliesStatus.type}.` : `Applied status: ${skill.effect.appliesStatus.type}.`);
+      }
+      if (!enemyIsImmuneToStatus(enemy, 'stunned') && Math.random() <= getPlayerStunChance(state, enemy, 'skill')) {
+        enemy.statusEffects = [...enemy.statusEffects, { type: 'stunned', duration: 1, potency: 1, source: skill.id }];
+        logs.push(state.settings.language === 'ru' ? 'Цель оглушена!' : 'Target is stunned!');
       }
 
       if (enemy.hp <= 0) {
@@ -3797,6 +4283,27 @@ export const useGameStore = create<GameState>((set, get) => {
           set({ combatLogs: [...logs, lang === 'ru' ? 'Этот предмет нельзя бросить во врага.' : 'This item cannot be thrown at an enemy.'] });
           return;
         }
+        const dodgeChance = getEnemyDodgeChance(player, enemy);
+        if (Math.random() < dodgeChance) {
+          logs.push(
+            lang === 'ru'
+              ? `${enemy.name.ru} уклоняется от брошенного предмета.`
+              : `${enemy.name.en} dodges the thrown item.`,
+          );
+          combo = 0;
+          adrenaline = Math.max(0, adrenaline - 2);
+          set({
+            player,
+            currentEnemy: enemy,
+            combatLogs: logs,
+            isPlayerBlocking: false,
+            combatStyle: { ...state.combatStyle, item: state.combatStyle.item + 1 },
+            combatCombo: combo,
+            combatAdrenaline: adrenaline,
+          });
+          enemyTurn(logs);
+          return;
+        }
         const throwDamage = rollDamage(item.stats.throwDamage);
         enemy.hp = Math.max(0, enemy.hp - throwDamage);
         enemy.isBlocking = false;
@@ -3804,6 +4311,10 @@ export const useGameStore = create<GameState>((set, get) => {
         if (item.stats.statusOnHit && Math.random() <= item.stats.statusOnHit.chance) {
           enemy.statusEffects = [...enemy.statusEffects, { ...item.stats.statusOnHit, source: item.id }];
           logs.push(lang === 'ru' ? `Цель получает эффект: ${item.stats.statusOnHit.type}.` : `Target gains status: ${item.stats.statusOnHit.type}.`);
+        }
+        if (!enemyIsImmuneToStatus(enemy, 'stunned') && Math.random() <= getPlayerStunChance(state, enemy, 'throw')) {
+          enemy.statusEffects = [...enemy.statusEffects, { type: 'stunned', duration: 1, potency: 1, source: item.id }];
+          logs.push(lang === 'ru' ? 'Цель оглушена!' : 'Target is stunned!');
         }
         combo = Math.min(COMBO_MAX, combo + 1);
         adrenaline = Math.min(ADRENALINE_MAX, adrenaline + 12);
@@ -3914,12 +4425,66 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     endCombat: () => {
-      set({ status: 'exploring', currentEnemy: null, combatLogs: [], isPlayerBlocking: false, combatStyle: { attack: 0, block: 0, item: 0, skill: 0 }, combatCombo: 0, combatAdrenaline: 0 });
+      const state = get();
+      const completedFight = Boolean(state.currentEnemy && state.currentEnemy.hp <= 0);
+      const nextGameTime = completedFight ? advanceGameTime(state.gameTime, 1) : state.gameTime;
+      set({ gameTime: nextGameTime, status: 'exploring', currentEnemy: null, combatLogs: [], isPlayerBlocking: false, combatStyle: { attack: 0, block: 0, item: 0, skill: 0 }, combatCombo: 0, combatAdrenaline: 0 });
       get().saveGame();
+    },
+
+    startTutorialCombat: () => {
+      const state = get();
+      if (state.status === 'combat' && state.currentEnemy) return;
+      const lang = state.settings.language;
+      const tutorialEnemyTemplate =
+        Object.values(ENEMIES).find((enemy) => enemy.level <= 2)
+        || Object.values(ENEMIES)[0];
+      if (!tutorialEnemyTemplate) return;
+      set({
+        status: 'combat',
+        currentEnemy: buildEnemy(tutorialEnemyTemplate),
+        combatLogs: [
+          lang === 'ru'
+            ? 'Учебный бой начался. Отработайте действия на практике.'
+            : 'Tutorial combat started. Practice each action in real combat.',
+        ],
+        isPlayerBlocking: false,
+        combatStyle: { attack: 0, block: 0, item: 0, skill: 0 },
+        combatCombo: 0,
+        combatAdrenaline: 0,
+      });
+    },
+
+    stopTutorialCombat: () => {
+      const state = get();
+      if (state.status !== 'combat') return;
+      set({
+        status: 'hub',
+        currentEnemy: null,
+        combatLogs: [],
+        isPlayerBlocking: false,
+        combatStyle: { attack: 0, block: 0, item: 0, skill: 0 },
+        combatCombo: 0,
+        combatAdrenaline: 0,
+      });
     },
 
     buyItem: (itemId, price) => {
       const state = get();
+      const period = getDayPeriodFromTime(state.gameTime);
+      const merchantId = getActiveMerchantIdForLocation(state.currentLocationId) || state.currentLocationId;
+      if (isMerchantClosedAtTime(merchantId, period, state.gameTime.totalHours)) {
+        void playSfx('ui_error_denied');
+        set({
+          combatLogs: [
+            ...(state.combatLogs || []),
+            state.settings.language === 'ru'
+              ? 'Торговля сейчас недоступна: торговцы закрыты для этого времени суток.'
+              : 'Trading is unavailable right now: merchants are closed for this time of day.',
+          ],
+        });
+        return;
+      }
       if (state.player.gold < price) return;
       if (!canCarry(state.player, itemId, 1)) return;
       const add = addItem(state.player, itemId, 1);
@@ -3933,12 +4498,27 @@ export const useGameStore = create<GameState>((set, get) => {
           wealth: Math.max(1, Math.floor(price * 0.08)),
         });
       }
+      void playSfx('shop_buy');
       set({ player, quests: syncQuestStates(state.quests, player), worldEconomy });
       get().saveGame();
     },
 
     sellItem: (itemId, price) => {
       const state = get();
+      const period = getDayPeriodFromTime(state.gameTime);
+      const merchantId = getActiveMerchantIdForLocation(state.currentLocationId) || state.currentLocationId;
+      if (isMerchantClosedAtTime(merchantId, period, state.gameTime.totalHours)) {
+        void playSfx('ui_error_denied');
+        set({
+          combatLogs: [
+            ...(state.combatLogs || []),
+            state.settings.language === 'ru'
+              ? 'Торговля сейчас недоступна: торговцы закрыты для этого времени суток.'
+              : 'Trading is unavailable right now: merchants are closed for this time of day.',
+          ],
+        });
+        return;
+      }
       const itemInInv = state.player.inventory.find((i) => i.itemId === itemId);
       if (!itemInInv || itemInInv.quantity <= 0) return;
 
@@ -3961,12 +4541,17 @@ export const useGameStore = create<GameState>((set, get) => {
           wealth: -Math.max(1, Math.floor(price * 0.05)),
         });
       }
+      void playSfx('shop_sell');
       set({ player, quests: syncQuestStates(state.quests, player), worldEconomy });
       get().saveGame();
     },
 
-    getBuyPrice: (merchantId, _itemId, basePrice) => {
+    getBuyPrice: (merchantId, itemId, basePrice) => {
       const state = get();
+      const period = getDayPeriodFromTime(state.gameTime);
+      if (isMerchantClosedAtTime(merchantId, period, state.gameTime.totalHours)) {
+        return Math.max(1, Math.round(basePrice * 9.99));
+      }
       const rep = state.player.merchantReputation?.[merchantId] || 0;
       const locMod = LOCATIONS[state.currentLocationId].merchantPriceMod || 1;
       const weather = state.currentWeather === 'storm' ? 1.1 : state.currentWeather === 'snow' ? 1.05 : 1;
@@ -3986,11 +4571,17 @@ export const useGameStore = create<GameState>((set, get) => {
           : hub?.marketMode === 'surplus'
             ? 0.94
             : 1;
-      return Math.max(1, Math.round(basePrice * locMod * weather * fatigueMarkup * repDiscount * stabilityMarkup * wealthMarkup * relationDiscount * marketPressure * modeMarkup));
+      const morningDiscount = period === 'morning' ? 0.92 : 1;
+      const eveningRareMod = getEveningRareItemPriceMod(period, merchantId, itemId, state.gameTime.totalHours);
+      return Math.max(1, Math.round(basePrice * locMod * weather * fatigueMarkup * repDiscount * stabilityMarkup * wealthMarkup * relationDiscount * marketPressure * modeMarkup * morningDiscount * eveningRareMod));
     },
 
-    getSellPrice: (merchantId, _itemId, basePrice) => {
+    getSellPrice: (merchantId, itemId, basePrice) => {
       const state = get();
+      const period = getDayPeriodFromTime(state.gameTime);
+      if (isMerchantClosedAtTime(merchantId, period, state.gameTime.totalHours)) {
+        return 0;
+      }
       const rep = state.player.merchantReputation?.[merchantId] || 0;
       const locMod = LOCATIONS[state.currentLocationId].merchantPriceMod || 1;
       const fatiguePenalty = 1 - getFatigueFactor(state.player) * 0.06;
@@ -4008,7 +4599,9 @@ export const useGameStore = create<GameState>((set, get) => {
           : hub?.marketMode === 'surplus'
             ? 0.93
             : 1;
-      return Math.max(1, Math.round(Math.floor(basePrice * 0.5) * (2 - locMod * 0.2) * repBonus * fatiguePenalty * wealthBonus * relationBonus * demandBonus * modeBonus));
+      const item = ITEMS[itemId];
+      const dayResourceBonus = period === 'day' && item?.type === 'material' ? 1.1 : 1;
+      return Math.max(1, Math.round(Math.floor(basePrice * 0.5) * (2 - locMod * 0.2) * repBonus * fatiguePenalty * wealthBonus * relationBonus * demandBonus * modeBonus * dayResourceBonus));
     },
 
     equipItem: (itemId, slot) => {
@@ -4049,8 +4642,20 @@ export const useGameStore = create<GameState>((set, get) => {
       recipe.ingredients.forEach((ing) => {
         player = removeItem(player, ing.itemId, ing.quantity);
       });
-      const add = addItem(player, recipe.resultItemId, recipe.resultQuantity);
+      const dayPeriod = getDayPeriodFromTime(state.gameTime);
+      const eveningHubBonus = dayPeriod === 'evening' && LOCATIONS[state.currentLocationId]?.type === 'hub' && Math.random() < 0.2 ? 1 : 0;
+      const add = addItem(player, recipe.resultItemId, recipe.resultQuantity + eveningHubBonus);
       if (add.added <= 0) return;
+      if (eveningHubBonus > 0 && add.added > recipe.resultQuantity) {
+        set({
+          combatLogs: [
+            ...(state.combatLogs || []),
+            state.settings.language === 'ru'
+              ? 'Вечерняя смена в мастерской дала бонус к крафту: +1 предмет.'
+              : 'Evening workshop shift improved crafting efficiency: +1 extra item.',
+          ],
+        });
+      }
       set({ player: add.player, quests: syncQuestStates(state.quests, add.player) });
       get().saveGame();
     },
