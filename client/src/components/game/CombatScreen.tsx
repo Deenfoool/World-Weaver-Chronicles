@@ -60,7 +60,15 @@ export default function CombatScreen() {
         && (q.offerState || 'active') === 'active'
         && q.isEventQuest
         && (q.eventQuest?.originType === 'war' || q.eventQuest?.originType === 'caravan_attack')
-        && q.locationId === currentLocationId
+        && (
+          q.locationId === currentLocationId
+          || (
+            q.eventQuest?.originType === 'caravan_attack'
+            && q.eventQuest?.branch === 'support'
+            && !!q.eventQuest.escort
+            && q.eventQuest.escort.route.includes(currentLocationId)
+          )
+        )
         && q.goals.some((g) => g.type === 'kill' && g.currentCount < g.targetCount),
       ),
     [quests, currentLocationId],

@@ -2,10 +2,12 @@ import { useGameStore } from '../../game/store';
 import { CheckCircle2, CircleDashed } from 'lucide-react';
 import { LOCATIONS, ENEMIES, NPCS } from '../../game/constants';
 import { T } from '../../game/translations';
+import { useMemo, useState } from 'react';
 
 export default function QuestsPanel() {
-  const { quests, settings, chooseEventQuestBranch, acceptQuest, turnInQuest, worldEconomy } = useGameStore();
+  const { quests, settings, chooseEventQuestBranch, acceptQuest, contributeToQuestTreasury, turnInQuest, worldEconomy, player } = useGameStore();
   const l = settings.language;
+  const [previewQuestId, setPreviewQuestId] = useState<string | null>(null);
   
   const offeredEventQuests = quests.filter(
     (q) => !q.isCompleted && q.isEventQuest && (q.offerState || 'active') === 'offered' && (!q.expiresAtTick || q.expiresAtTick > worldEconomy.tick),
@@ -26,6 +28,88 @@ export default function QuestsPanel() {
   const warRelation = warA && warB
     ? worldEconomy.hubRelations[`${warA}__${warB}`] || worldEconomy.hubRelations[`${warB}__${warA}`]
     : null;
+  const previewQuest = useMemo(
+    () => offeredEventQuests.find((q) => q.id === previewQuestId) || null,
+    [offeredEventQuests, previewQuestId],
+  );
+  const getBranchCards = (quest: typeof offeredEventQuests[number]) => {
+    const origin = quest.eventQuest?.originType;
+    if (origin === 'war') {
+      return [
+        {
+          branch: 'support_a' as const,
+          title: l === 'ru' ? 'Поддержать сторону A' : 'Support Side A',
+          impacts: [
+            l === 'ru' ? '+12 репутации у A, -10 у B' : '+12 reputation with A, -10 with B',
+            l === 'ru' ? '- риск маршрутов A, + устойчивость рынка A' : '- route risk for A, + market stability for A',
+          ],
+        },
+        {
+          branch: 'support_b' as const,
+          title: l === 'ru' ? 'Поддержать сторону B' : 'Support Side B',
+          impacts: [
+            l === 'ru' ? '+12 репутации у B, -10 у A' : '+12 reputation with B, -10 with A',
+            l === 'ru' ? '- риск маршрутов B, + устойчивость рынка B' : '- route risk for B, + market stability for B',
+          ],
+        },
+        {
+          branch: 'neutral' as const,
+          title: l === 'ru' ? 'Нейтралитет' : 'Neutrality',
+          impacts: [
+            l === 'ru' ? '-3 репутации у обеих сторон' : '-3 reputation with both sides',
+            l === 'ru' ? 'Среднее давление цен, без сильной стабилизации' : 'Moderate price pressure, no strong stabilization',
+          ],
+        },
+      ];
+    }
+    if (origin === 'caravan_attack') {
+      const fights = Math.max(3, Math.min(6, 2 + (quest.eventQuest?.sourceHubLevel || 3)));
+      return [
+        {
+          branch: 'support' as const,
+          title: l === 'ru' ? 'Сопроводить караван' : 'Escort Caravan',
+          impacts: [
+            l === 'ru' ? `${fights} последовательных боёв в засадах на маршруте` : `${fights} consecutive ambush fights on route`,
+            l === 'ru' ? 'Идеальный проход: дополнительная награда при сдаче' : 'Perfect run: extra turn-in reward',
+          ],
+        },
+        {
+          branch: 'punish' as const,
+          title: l === 'ru' ? 'Ограбить караван' : 'Raid Caravan',
+          impacts: [
+            l === 'ru' ? `${fights} боёв, высокий лут, сильнее просадка экономики хаба` : `${fights} fights, high loot, stronger hub economy hit`,
+            l === 'ru' ? '- репутация и + дефицит/волатильность цен' : '- reputation and + scarcity/price volatility',
+          ],
+        },
+        {
+          branch: 'neutral' as const,
+          title: l === 'ru' ? 'Не вмешиваться' : 'Do Not Interfere',
+          impacts: [
+            l === 'ru' ? 'Без цепочки боёв, низкая награда' : 'No battle chain, low reward',
+            l === 'ru' ? 'Рынок почти без изменений' : 'Market mostly unchanged',
+          ],
+        },
+      ];
+    }
+    return [
+      {
+        branch: 'support' as const,
+        title: l === 'ru' ? 'Поддержать' : 'Support',
+        impacts: [
+          l === 'ru' ? '+ богатство/стабильность хаба, + отношение' : '+ hub wealth/stability, + relation',
+          l === 'ru' ? 'Цены ближе к стабильным' : 'Prices trend toward stable',
+        ],
+      },
+      {
+        branch: 'punish' as const,
+        title: l === 'ru' ? 'Наказать' : 'Punish',
+        impacts: [
+          l === 'ru' ? '- богатство/стабильность хаба, - отношение' : '- hub wealth/stability, - relation',
+          l === 'ru' ? 'Больше дефицита и ценового давления' : 'Higher scarcity and price pressure',
+        ],
+      },
+    ];
+  };
 
   return (
     <div className="p-4 space-y-6">
@@ -44,97 +128,15 @@ export default function QuestsPanel() {
                   <div className="space-y-2">
                     <p className="text-[11px] text-primary/90">
                       {l === 'ru'
-                        ? 'Выберите ветку перед принятием квеста:'
-                        : 'Choose a branch before accepting this quest:'}
+                        ? 'Перед принятием откройте контракт и просмотрите последствия веток.'
+                        : 'Open the contract board and review branch consequences before acceptance.'}
                     </p>
-                    {quest.eventQuest?.originType === 'war' ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <div className="rounded border border-emerald-500/25 bg-emerald-500/5 p-2 space-y-1">
-                          <button
-                            onClick={() => chooseEventQuestBranch(quest.id, 'support_a')}
-                            className="w-full rounded border border-emerald-500/35 bg-emerald-500/10 text-emerald-300 text-xs py-2 hover:bg-emerald-500/20 transition-colors"
-                          >
-                            {l === 'ru' ? 'Поддержать сторону A' : 'Support side A'}
-                          </button>
-                          <p className="text-[10px] text-emerald-200/90">
-                            {l === 'ru' ? '+репутация A / -репутация B' : '+rep A / -rep B'}
-                          </p>
-                        </div>
-                        <div className="rounded border border-sky-500/25 bg-sky-500/5 p-2 space-y-1">
-                          <button
-                            onClick={() => chooseEventQuestBranch(quest.id, 'support_b')}
-                            className="w-full rounded border border-sky-500/35 bg-sky-500/10 text-sky-300 text-xs py-2 hover:bg-sky-500/20 transition-colors"
-                          >
-                            {l === 'ru' ? 'Поддержать сторону B' : 'Support side B'}
-                          </button>
-                          <p className="text-[10px] text-sky-200/90">
-                            {l === 'ru' ? '+репутация B / -репутация A' : '+rep B / -rep A'}
-                          </p>
-                        </div>
-                        <div className="rounded border border-white/15 bg-white/5 p-2 space-y-1">
-                          <button
-                            onClick={() => chooseEventQuestBranch(quest.id, 'neutral')}
-                            className="w-full rounded border border-white/20 bg-white/5 text-white text-xs py-2 hover:bg-white/10 transition-colors"
-                          >
-                            {l === 'ru' ? 'Не вмешиваться' : 'Stay neutral'}
-                          </button>
-                          <p className="text-[10px] text-muted-foreground">
-                            {l === 'ru' ? '-малая репутация у обеих сторон' : '-small reputation with both sides'}
-                          </p>
-                        </div>
-                      </div>
-                    ) : quest.eventQuest?.originType === 'caravan_attack' ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <div className="rounded border border-destructive/25 bg-destructive/5 p-2 space-y-1">
-                          <button
-                            onClick={() => chooseEventQuestBranch(quest.id, 'punish')}
-                            className="w-full rounded border border-destructive/35 bg-destructive/10 text-destructive text-xs py-2 hover:bg-destructive/20 transition-colors"
-                          >
-                            {l === 'ru' ? 'Атаковать караван' : 'Attack caravan'}
-                          </button>
-                          <p className="text-[10px] text-destructive/90">
-                            {l === 'ru' ? '3–6 боёв, высокая добыча, больше риск' : '3–6 fights, higher loot, higher risk'}
-                          </p>
-                        </div>
-                        <div className="rounded border border-emerald-500/25 bg-emerald-500/5 p-2 space-y-1">
-                          <button
-                            onClick={() => chooseEventQuestBranch(quest.id, 'support')}
-                            className="w-full rounded border border-emerald-500/35 bg-emerald-500/10 text-emerald-300 text-xs py-2 hover:bg-emerald-500/20 transition-colors"
-                          >
-                            {l === 'ru' ? 'Сопроводить караван' : 'Escort caravan'}
-                          </button>
-                          <p className="text-[10px] text-emerald-200/90">
-                            {l === 'ru' ? '3–6 боёв, стабильная награда, рост доверия' : '3–6 fights, stable rewards, trust gain'}
-                          </p>
-                        </div>
-                        <div className="rounded border border-white/15 bg-white/5 p-2 space-y-1">
-                          <button
-                            onClick={() => chooseEventQuestBranch(quest.id, 'neutral')}
-                            className="w-full rounded border border-white/20 bg-white/5 text-white text-xs py-2 hover:bg-white/10 transition-colors"
-                          >
-                            {l === 'ru' ? 'Не трогать караван' : 'Leave convoy alone'}
-                          </button>
-                          <p className="text-[10px] text-muted-foreground">
-                            {l === 'ru' ? 'Без боёв, минимальная награда' : 'No fight chain, minimal reward'}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <button
-                          onClick={() => chooseEventQuestBranch(quest.id, 'support')}
-                          className="rounded border border-emerald-500/35 bg-emerald-500/10 text-emerald-300 text-xs py-2 hover:bg-emerald-500/20 transition-colors"
-                        >
-                          {l === 'ru' ? 'Поддержать / Вознаградить' : 'Support / Reward'}
-                        </button>
-                        <button
-                          onClick={() => chooseEventQuestBranch(quest.id, 'punish')}
-                          className="rounded border border-destructive/35 bg-destructive/10 text-destructive text-xs py-2 hover:bg-destructive/20 transition-colors"
-                        >
-                          {l === 'ru' ? 'Наказать / Дестабилизировать' : 'Punish / Destabilize'}
-                        </button>
-                      </div>
-                    )}
+                    <button
+                      onClick={() => setPreviewQuestId(quest.id)}
+                      className="rounded border border-primary/35 bg-primary/10 text-primary text-xs py-2 px-3 hover:bg-primary/20 transition-colors"
+                    >
+                      {l === 'ru' ? 'Открыть контракт' : 'Open contract board'}
+                    </button>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -171,6 +173,12 @@ export default function QuestsPanel() {
                       className="rounded border border-primary/35 bg-primary/10 text-primary text-xs py-2 px-3 hover:bg-primary/20 transition-colors"
                     >
                       {l === 'ru' ? 'Принять контракт' : 'Accept contract'}
+                    </button>
+                    <button
+                      onClick={() => setPreviewQuestId(quest.id)}
+                      className="rounded border border-white/20 bg-white/5 text-white text-xs py-2 px-3 hover:bg-white/10 transition-colors ml-2"
+                    >
+                      {l === 'ru' ? 'Изменить выбор' : 'Change choice'}
                     </button>
                   </div>
                 )}
@@ -246,18 +254,41 @@ export default function QuestsPanel() {
                     {l === 'ru' ? 'Статус: в процессе' : 'Status: in progress'}
                   </p>
                 )}
+                {quest.isEventQuest && quest.eventQuest?.originType === 'caravan_attack' && quest.eventQuest?.branch === 'support' && quest.eventQuest?.escort && (
+                  <div className="pl-2 mb-3 rounded border border-amber-500/25 bg-amber-500/10 p-2 text-[11px] text-amber-100">
+                    <p>
+                      {l === 'ru'
+                        ? `Маршрут: этап ${Math.min(quest.eventQuest.escort.currentLeg + 1, quest.eventQuest.escort.route.length)}/${quest.eventQuest.escort.route.length}.`
+                        : `Route: stage ${Math.min(quest.eventQuest.escort.currentLeg + 1, quest.eventQuest.escort.route.length)}/${quest.eventQuest.escort.route.length}.`}
+                    </p>
+                    <p>
+                      {l === 'ru'
+                        ? `Засады: ${quest.eventQuest.escort.clearedAmbushLocations.length}/${quest.eventQuest.escort.totalAmbushes}.`
+                        : `Ambushes: ${quest.eventQuest.escort.clearedAmbushLocations.length}/${quest.eventQuest.escort.totalAmbushes}.`}
+                    </p>
+                    <p>
+                      {quest.eventQuest.escort.perfectRun
+                        ? (l === 'ru' ? 'Идеальный проход: активен бонус при сдаче.' : 'Perfect run: turn-in bonus active.')
+                        : (l === 'ru' ? 'Идеальный проход сорван.' : 'Perfect run lost.')}
+                    </p>
+                  </div>
+                )}
                 
                 <div className="space-y-2 pl-2 bg-black/40 p-2 rounded">
                   {quest.goals.map((goal, idx) => {
-                      const targetName = goal.type === 'kill' && ENEMIES[goal.targetId] 
-                      ? ENEMIES[goal.targetId].name[l] 
-                      : goal.targetId;
+                    const targetName = goal.type === 'kill' && ENEMIES[goal.targetId]
+                      ? ENEMIES[goal.targetId].name[l]
+                      : LOCATIONS[goal.targetId]?.name?.[l] || goal.targetId;
                     const goalVerb =
                       goal.type === 'kill'
                         ? T.quest_defeat[l]
+                        : goal.type === 'deliver'
+                          ? (l === 'ru' ? 'Доставить поручение в' : 'Deliver dispatch to')
+                          : goal.type === 'donate'
+                            ? (l === 'ru' ? 'Внести золото в казну' : 'Donate gold to treasury')
                         : goal.type === 'collect'
-                        ? (l === 'ru' ? 'Собрать' : 'Collect')
-                        : (l === 'ru' ? 'Исследовать' : 'Explore');
+                          ? (l === 'ru' ? 'Собрать' : 'Collect')
+                          : (l === 'ru' ? 'Исследовать' : 'Explore');
                     return (
                       <div key={idx} className="flex justify-between items-center text-xs">
                         <span className="flex items-center gap-2 text-gray-300">
@@ -274,6 +305,34 @@ export default function QuestsPanel() {
                     )
                   })}
                 </div>
+                {quest.goals.some((g) => g.type === 'donate' && g.currentCount < g.targetCount) && (
+                  <div className="pl-2 mt-3 flex flex-wrap gap-2 items-center">
+                    <span className="text-[11px] text-muted-foreground">
+                      {l === 'ru' ? `Казна: ${player.gold} золота` : `Treasury funds: ${player.gold} gold`}
+                    </span>
+                    <button
+                      onClick={() => contributeToQuestTreasury(quest.id, 25)}
+                      disabled={player.gold <= 0}
+                      className="rounded border border-amber-500/35 bg-amber-500/10 text-amber-200 text-xs py-1.5 px-2 hover:bg-amber-500/20 transition-colors disabled:opacity-40"
+                    >
+                      {l === 'ru' ? 'Внести 25' : 'Donate 25'}
+                    </button>
+                    <button
+                      onClick={() => contributeToQuestTreasury(quest.id, 50)}
+                      disabled={player.gold <= 0}
+                      className="rounded border border-amber-500/35 bg-amber-500/10 text-amber-200 text-xs py-1.5 px-2 hover:bg-amber-500/20 transition-colors disabled:opacity-40"
+                    >
+                      {l === 'ru' ? 'Внести 50' : 'Donate 50'}
+                    </button>
+                    <button
+                      onClick={() => contributeToQuestTreasury(quest.id, player.gold)}
+                      disabled={player.gold <= 0}
+                      className="rounded border border-amber-500/35 bg-amber-500/10 text-amber-200 text-xs py-1.5 px-2 hover:bg-amber-500/20 transition-colors disabled:opacity-40"
+                    >
+                      {l === 'ru' ? 'Внести максимум' : 'Donate max'}
+                    </button>
+                  </div>
+                )}
                 {quest.isEventQuest && quest.isTurnInReady && (
                   <div className="pl-2 mt-3">
                     <button
@@ -324,6 +383,53 @@ export default function QuestsPanel() {
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+      {previewQuest && (
+        <div className="fixed inset-0 z-50 bg-black/75 p-4 flex items-center justify-center">
+          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded border border-primary/25 bg-zinc-950 p-4 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="font-serif text-xl text-white">{previewQuest.name[l]}</h3>
+                <p className="text-xs text-muted-foreground mt-1">{previewQuest.description[l]}</p>
+              </div>
+              <button
+                onClick={() => setPreviewQuestId(null)}
+                className="rounded border border-white/20 bg-white/5 text-white text-xs px-2 py-1 hover:bg-white/10"
+              >
+                {l === 'ru' ? 'Закрыть' : 'Close'}
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs text-primary/90">
+                {l === 'ru'
+                  ? 'Выберите ветку. Ниже показан прогноз последствий для экономики и репутации.'
+                  : 'Select a branch. Forecasted economy and reputation consequences are shown below.'}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {getBranchCards(previewQuest).map((card) => (
+                  <div key={`${previewQuest.id}_${card.branch}`} className="rounded border border-white/15 bg-black/35 p-3 space-y-2">
+                    <p className="text-sm text-white font-semibold">{card.title}</p>
+                    <div className="space-y-1">
+                      {card.impacts.map((impact, idx) => (
+                        <p key={idx} className="text-[11px] text-muted-foreground">• {impact}</p>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => {
+                        chooseEventQuestBranch(previewQuest.id, card.branch);
+                        setPreviewQuestId(null);
+                      }}
+                      className="w-full rounded border border-primary/35 bg-primary/10 text-primary text-xs py-2 hover:bg-primary/20 transition-colors"
+                    >
+                      {l === 'ru' ? 'Выбрать ветку' : 'Choose branch'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}

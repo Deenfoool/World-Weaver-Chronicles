@@ -60,6 +60,7 @@ interface GameState {
   breakCamp: () => void;
   acceptQuest: (questId: string, npcId?: string) => void;
   chooseEventQuestBranch: (questId: string, branch: 'support' | 'punish' | 'support_a' | 'support_b' | 'neutral') => void;
+  contributeToQuestTreasury: (questId: string, goldAmount: number) => void;
   turnInQuest: (questId: string, npcId?: string) => void;
   unlockCodexEntry: (section: keyof CodexUnlocks, id: string) => void;
   raidCaravan: (hubId: string) => void;
@@ -143,6 +144,8 @@ const LEVEL_DOWN_STREAK_REQUIRED = 2;
 const DESTRUCTION_WEALTH_THRESHOLD = 40;
 const DESTRUCTION_STREAK_REQUIRED = 4;
 const ECONOMY_EVENT_LIMIT = 16;
+const REPUTATION_LOG_LIMIT = 120;
+const CONSEQUENCE_QUEUE_LIMIT = 40;
 const ENERGY_COSTS = { attack: 15, flee: 20, item: 10, throw: 12 };
 const COMBO_MAX = 5;
 const ADRENALINE_MAX = 100;
@@ -223,6 +226,32 @@ function appendEconomyEvent(
   return { ...worldEconomy, events };
 }
 
+function appendReputationLog(
+  worldEconomy: WorldEconomyState,
+  entry: Omit<WorldEconomyState['reputationLog'][number], 'id' | 'tick'> & { tick?: number },
+): WorldEconomyState {
+  const tick = entry.tick ?? worldEconomy.tick;
+  const next = {
+    id: `rep_${entry.hubId}_${tick}_${Math.floor(Math.random() * 100000)}`,
+    tick,
+    ...entry,
+  };
+  const reputationLog = [...(worldEconomy.reputationLog || []), next].slice(-REPUTATION_LOG_LIMIT);
+  return { ...worldEconomy, reputationLog };
+}
+
+function queueEconomyConsequence(
+  worldEconomy: WorldEconomyState,
+  consequence: Omit<WorldEconomyState['pendingConsequences'][number], 'id'>,
+): WorldEconomyState {
+  const next = {
+    ...consequence,
+    id: `cons_${consequence.kind}_${consequence.triggerHubId}_${consequence.dueTick}_${Math.floor(Math.random() * 100000)}`,
+  };
+  const pendingConsequences = [...(worldEconomy.pendingConsequences || []), next].slice(-CONSEQUENCE_QUEUE_LIMIT);
+  return { ...worldEconomy, pendingConsequences };
+}
+
 function resolveHubLevel(wealth: number): number {
   let level = 0;
   for (let i = 0; i < HUB_LEVEL_THRESHOLDS.length; i += 1) {
@@ -251,6 +280,26 @@ function findLocationDistance(fromId: string, toId: string): number | null {
       if (neighbor === toId) return next.dist + 1;
       visited.add(neighbor);
       queue.push({ id: neighbor, dist: next.dist + 1 });
+    }
+  }
+  return null;
+}
+
+function findLocationPath(fromId: string, toId: string): string[] | null {
+  if (fromId === toId) return [fromId];
+  const visited = new Set<string>([fromId]);
+  const queue: Array<{ id: string; path: string[] }> = [{ id: fromId, path: [fromId] }];
+  while (queue.length > 0) {
+    const next = queue.shift();
+    if (!next) break;
+    const loc = LOCATIONS[next.id];
+    if (!loc) continue;
+    for (const neighbor of loc.connectedLocations || []) {
+      if (visited.has(neighbor)) continue;
+      const path = [...next.path, neighbor];
+      if (neighbor === toId) return path;
+      visited.add(neighbor);
+      queue.push({ id: neighbor, path });
     }
   }
   return null;
@@ -442,6 +491,8 @@ function createDefaultWorldEconomy(): WorldEconomyState {
     hubRelations: buildDefaultHubRelations(hubIds),
     spawnedHubIds: [],
     events: [],
+    pendingConsequences: [],
+    reputationLog: [],
   };
 }
 
@@ -454,6 +505,8 @@ function normalizeWorldEconomy(input: unknown): WorldEconomyState {
   const rawRoutes = (raw.tradeRoutes || {}) as Record<string, any>;
   const rawRelations = (raw.hubRelations || {}) as Record<string, any>;
   const rawEvents = Array.isArray(raw.events) ? raw.events : [];
+  const rawPending = Array.isArray((raw as any).pendingConsequences) ? (raw as any).pendingConsequences : [];
+  const rawRepLog = Array.isArray((raw as any).reputationLog) ? (raw as any).reputationLog : [];
   const hubs = Object.entries(defaults.hubs).reduce<WorldEconomyState['hubs']>((acc, [hubId, fallback]) => {
     const src = rawHubs[hubId] || {};
     const wealth = Number.isFinite(src.wealth) ? Number(src.wealth) : fallback.wealth;
@@ -544,6 +597,9 @@ function normalizeWorldEconomy(input: unknown): WorldEconomyState {
           || eventType === 'black_market_opened'
           || eventType === 'hub_destroyed'
           || eventType === 'hub_founded'
+          || eventType === 'retaliation'
+          || eventType === 'aid_arrival'
+          || eventType === 'tariff_relief'
           || eventType === 'player_raid'
           || eventType === 'player_investment'
           || eventType === 'player_diplomacy'
@@ -563,12 +619,60 @@ function normalizeWorldEconomy(input: unknown): WorldEconomyState {
       })
       .filter((event): event is WorldEconomyEvent => Boolean(event))
       .slice(-ECONOMY_EVENT_LIMIT),
+    pendingConsequences: rawPending
+      .map((src: any, idx: number) => {
+        if (!src || typeof src !== 'object') return null;
+        const kind = typeof src.kind === 'string' ? src.kind : '';
+        const validKind = kind === 'retaliation' || kind === 'aid_arrival' || kind === 'tariff_relief' || kind === 'smuggler_crackdown';
+        if (!validKind) return null;
+        const sourceBranch = typeof src.sourceBranch === 'string' ? src.sourceBranch : '';
+        const validBranch = sourceBranch === 'support' || sourceBranch === 'punish' || sourceBranch === 'support_a' || sourceBranch === 'support_b' || sourceBranch === 'neutral';
+        if (!validBranch) return null;
+        const dueTick = Number.isFinite(src.dueTick) ? Math.max(0, Math.floor(src.dueTick)) : 0;
+        const intensity = Number.isFinite(src.intensity) ? clamp(Math.floor(src.intensity), 0, 100) : 40;
+        if (typeof src.triggerHubId !== 'string' || src.triggerHubId.length === 0) return null;
+        return {
+          id: typeof src.id === 'string' && src.id.length > 0 ? src.id : `cons_norm_${idx}`,
+          dueTick,
+          originQuestId: typeof src.originQuestId === 'string' ? src.originQuestId : `legacy_${idx}`,
+          triggerHubId: src.triggerHubId,
+          targetHubId: typeof src.targetHubId === 'string' ? src.targetHubId : undefined,
+          kind,
+          intensity,
+          sourceBranch,
+        } as WorldEconomyState['pendingConsequences'][number];
+      })
+      .filter((x: WorldEconomyState['pendingConsequences'][number] | null): x is WorldEconomyState['pendingConsequences'][number] => Boolean(x))
+      .slice(-CONSEQUENCE_QUEUE_LIMIT),
+    reputationLog: rawRepLog
+      .map((src: any, idx: number) => {
+        if (!src || typeof src !== 'object') return null;
+        if (typeof src.hubId !== 'string' || src.hubId.length === 0) return null;
+        const source = src.source === 'quest_resolution' || src.source === 'delayed_consequence' || src.source === 'player_action'
+          ? src.source
+          : 'quest_resolution';
+        const delta = Number.isFinite(src.delta) ? clamp(Math.floor(src.delta), -100, 100) : 0;
+        if (delta === 0) return null;
+        return {
+          id: typeof src.id === 'string' && src.id.length > 0 ? src.id : `rep_norm_${idx}`,
+          tick: Number.isFinite(src.tick) ? Math.max(0, Math.floor(src.tick)) : 0,
+          hubId: src.hubId,
+          delta,
+          reason: typeof src.reason === 'string' && src.reason.length > 0 ? src.reason : 'Reputation shift',
+          source,
+          relatedHubId: typeof src.relatedHubId === 'string' ? src.relatedHubId : undefined,
+        } as WorldEconomyState['reputationLog'][number];
+      })
+      .filter((x: WorldEconomyState['reputationLog'][number] | null): x is WorldEconomyState['reputationLog'][number] => Boolean(x))
+      .slice(-REPUTATION_LOG_LIMIT),
   };
 }
 
 function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather: WeatherType): WorldEconomyState {
   const nextTick = seed.tick + 1;
   const events = [...(seed.events || [])].slice(-(ECONOMY_EVENT_LIMIT - 6));
+  let reputationLog = [...(seed.reputationLog || [])].slice(-REPUTATION_LOG_LIMIT);
+  const pendingConsequences = [...(seed.pendingConsequences || [])];
   let hubs = Object.entries(seed.hubs).reduce<WorldEconomyState['hubs']>((acc, [hubId, hub]) => {
     if (hub.destroyed) {
       acc[hubId] = {
@@ -846,6 +950,153 @@ function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather: Weath
     }
   }
 
+  const due = pendingConsequences.filter((c) => c.dueTick <= nextTick);
+  const deferred = pendingConsequences.filter((c) => c.dueTick > nextTick);
+  due.forEach((cons) => {
+    const triggerHub = hubs[cons.triggerHubId];
+    if (!triggerHub || triggerHub.destroyed) return;
+    const targetHubId = cons.targetHubId && hubs[cons.targetHubId] ? cons.targetHubId : undefined;
+    const relationTargetHub = targetHubId ? hubs[targetHubId] : null;
+    const relationKey = targetHubId ? hubRelationKey(cons.triggerHubId, targetHubId) : null;
+    const relation = relationKey ? hubRelations[relationKey] : null;
+    if (cons.kind === 'retaliation') {
+      hubs = {
+        ...hubs,
+        [cons.triggerHubId]: {
+          ...triggerHub,
+          stability: clamp(triggerHub.stability - Math.max(3, Math.floor(cons.intensity / 12)), 0, 100),
+          playerRelation: clamp(triggerHub.playerRelation - Math.max(4, Math.floor(cons.intensity / 10)), -100, 100),
+          supply: clamp(triggerHub.supply - 2, 0, 100),
+          demand: clamp(triggerHub.demand + 2, 0, 100),
+        },
+      };
+      if (relation && relationTargetHub) {
+        hubRelations[relationKey!] = {
+          ...relation,
+          strength: clamp(relation.strength - 6, -100, 100),
+          status: clamp(relation.strength - 6, -100, 100) <= -35 ? 'conflict' : relation.status,
+        };
+      }
+      events.push({
+        id: `retaliation_${cons.triggerHubId}_${nextTick}_${Math.floor(Math.random() * 100000)}`,
+        tick: nextTick,
+        type: 'retaliation',
+        hubId: cons.triggerHubId,
+        targetHubId,
+        intensity: cons.intensity,
+      });
+      const nextHub = hubs[cons.triggerHubId];
+      if (nextHub && nextHub.playerRelation !== triggerHub.playerRelation) {
+        reputationLog.push({
+          id: `rep_delay_${cons.triggerHubId}_${nextTick}_${Math.floor(Math.random() * 100000)}`,
+          tick: nextTick,
+          hubId: cons.triggerHubId,
+          delta: nextHub.playerRelation - triggerHub.playerRelation,
+          reason: 'Retaliation fallout after earlier conflict choices',
+          source: 'delayed_consequence',
+          relatedHubId: targetHubId,
+        });
+      }
+    } else if (cons.kind === 'aid_arrival') {
+      hubs = {
+        ...hubs,
+        [cons.triggerHubId]: {
+          ...triggerHub,
+          wealth: clamp(triggerHub.wealth + Math.max(14, Math.floor(cons.intensity / 2)), 0, 1200),
+          stability: clamp(triggerHub.stability + Math.max(3, Math.floor(cons.intensity / 14)), 0, 100),
+          playerRelation: clamp(triggerHub.playerRelation + Math.max(2, Math.floor(cons.intensity / 16)), -100, 100),
+          supply: clamp(triggerHub.supply + 3, 0, 100),
+          demand: clamp(triggerHub.demand - 2, 0, 100),
+        },
+      };
+      events.push({
+        id: `aid_arrival_${cons.triggerHubId}_${nextTick}_${Math.floor(Math.random() * 100000)}`,
+        tick: nextTick,
+        type: 'aid_arrival',
+        hubId: cons.triggerHubId,
+        intensity: cons.intensity,
+      });
+      const nextHub = hubs[cons.triggerHubId];
+      if (nextHub && nextHub.playerRelation !== triggerHub.playerRelation) {
+        reputationLog.push({
+          id: `rep_delay_${cons.triggerHubId}_${nextTick}_${Math.floor(Math.random() * 100000)}`,
+          tick: nextTick,
+          hubId: cons.triggerHubId,
+          delta: nextHub.playerRelation - triggerHub.playerRelation,
+          reason: 'Aid and reconstruction gratitude reached local authorities',
+          source: 'delayed_consequence',
+        });
+      }
+    } else if (cons.kind === 'tariff_relief') {
+      hubs = {
+        ...hubs,
+        [cons.triggerHubId]: {
+          ...triggerHub,
+          demand: clamp(triggerHub.demand - 4, 0, 100),
+          stability: clamp(triggerHub.stability + 2, 0, 100),
+          playerRelation: clamp(triggerHub.playerRelation + 2, -100, 100),
+        },
+      };
+      if (relation && relationTargetHub) {
+        const nextStrength = clamp(relation.strength + 5, -100, 100);
+        hubRelations[relationKey!] = {
+          ...relation,
+          strength: nextStrength,
+          status: nextStrength >= 35 ? 'allied' : nextStrength <= -35 ? 'conflict' : 'neutral',
+        };
+      }
+      events.push({
+        id: `tariff_relief_${cons.triggerHubId}_${nextTick}_${Math.floor(Math.random() * 100000)}`,
+        tick: nextTick,
+        type: 'tariff_relief',
+        hubId: cons.triggerHubId,
+        targetHubId,
+        intensity: cons.intensity,
+      });
+      const nextHub = hubs[cons.triggerHubId];
+      if (nextHub && nextHub.playerRelation !== triggerHub.playerRelation) {
+        reputationLog.push({
+          id: `rep_delay_${cons.triggerHubId}_${nextTick}_${Math.floor(Math.random() * 100000)}`,
+          tick: nextTick,
+          hubId: cons.triggerHubId,
+          delta: nextHub.playerRelation - triggerHub.playerRelation,
+          reason: 'Tariff relief and diplomatic pressure lowered market tension',
+          source: 'delayed_consequence',
+          relatedHubId: targetHubId,
+        });
+      }
+    } else if (cons.kind === 'smuggler_crackdown') {
+      hubs = {
+        ...hubs,
+        [cons.triggerHubId]: {
+          ...triggerHub,
+          stability: clamp(triggerHub.stability + 2, 0, 100),
+          supply: clamp(triggerHub.supply - 1, 0, 100),
+          demand: clamp(triggerHub.demand + 1, 0, 100),
+          playerRelation: clamp(triggerHub.playerRelation - 2, -100, 100),
+        },
+      };
+      events.push({
+        id: `retaliation_smug_${cons.triggerHubId}_${nextTick}_${Math.floor(Math.random() * 100000)}`,
+        tick: nextTick,
+        type: 'retaliation',
+        hubId: cons.triggerHubId,
+        intensity: cons.intensity,
+      });
+      const nextHub = hubs[cons.triggerHubId];
+      if (nextHub && nextHub.playerRelation !== triggerHub.playerRelation) {
+        reputationLog.push({
+          id: `rep_delay_${cons.triggerHubId}_${nextTick}_${Math.floor(Math.random() * 100000)}`,
+          tick: nextTick,
+          hubId: cons.triggerHubId,
+          delta: nextHub.playerRelation - triggerHub.playerRelation,
+          reason: 'Crackdown backlash from smuggler networks',
+          source: 'delayed_consequence',
+        });
+      }
+    }
+  });
+
   return {
     tick: nextTick,
     hubs,
@@ -853,6 +1104,8 @@ function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather: Weath
     hubRelations,
     spawnedHubIds: seed.spawnedHubIds,
     events: events.slice(-ECONOMY_EVENT_LIMIT),
+    pendingConsequences: deferred.slice(-CONSEQUENCE_QUEUE_LIMIT),
+    reputationLog: reputationLog.slice(-REPUTATION_LOG_LIMIT),
   };
 }
 
@@ -898,6 +1151,41 @@ function worldHubLevelForEventQuest(quest: Quest): number {
   const maybeLevel = quest.eventQuest?.sourceHubLevel;
   if (Number.isFinite(maybeLevel) && Number(maybeLevel) > 0) return Number(maybeLevel);
   return 3;
+}
+
+function pickEscortOriginHub(targetHubId: string): string {
+  const hubIds = Object.values(LOCATIONS)
+    .filter((loc) => loc.type === 'hub')
+    .map((loc) => loc.id)
+    .filter((id) => id !== targetHubId);
+  if (hubIds.length === 0) return targetHubId;
+  const scored = hubIds
+    .map((hubId) => ({ hubId, distance: findLocationDistance(hubId, targetHubId) }))
+    .filter((x): x is { hubId: string; distance: number } => x.distance !== null);
+  if (scored.length === 0) return hubIds[0];
+  scored.sort((a, b) => a.distance - b.distance);
+  return scored[0].hubId;
+}
+
+function buildEscortRoute(targetHubId: string, killCount: number) {
+  const originHubId = pickEscortOriginHub(targetHubId);
+  const route = findLocationPath(originHubId, targetHubId) || [originHubId, targetHubId];
+  const roadNodes = route.filter((locId) => LOCATIONS[locId]?.type !== 'hub');
+  const ambushLocationIds: string[] = [];
+  for (let i = 0; i < roadNodes.length && ambushLocationIds.length < killCount; i += 1) {
+    ambushLocationIds.push(roadNodes[i]);
+  }
+  let idx = 0;
+  while (ambushLocationIds.length < killCount && route.length > 1) {
+    const fallback = route[Math.max(1, Math.min(route.length - 2, idx % Math.max(1, route.length - 1)))];
+    ambushLocationIds.push(fallback || route[route.length - 1]);
+    idx += 1;
+  }
+  return {
+    originHubId,
+    route,
+    ambushLocationIds,
+  };
 }
 
 function riskSpikeFromWeather(currentWeather: WeatherType, stability: number): boolean {
@@ -1198,6 +1486,7 @@ function toEventQuestOffer(event: WorldEconomyEvent, sourceHubLevel?: number): Q
     && event.type !== 'prosperity'
     && event.type !== 'black_market_opened'
     && event.type !== 'hub_destroyed'
+    && event.type !== 'hub_founded'
   ) {
     return null;
   }
@@ -1212,6 +1501,8 @@ function toEventQuestOffer(event: WorldEconomyEvent, sourceHubLevel?: number): Q
           ? 'Crisis Contract'
           : event.type === 'prosperity'
             ? 'Prosperity Directive'
+            : event.type === 'hub_founded'
+              ? 'Founding Charter'
             : event.type === 'hub_destroyed'
               ? 'Recovery Mandate'
               : 'Black Market Dossier';
@@ -1224,6 +1515,8 @@ function toEventQuestOffer(event: WorldEconomyEvent, sourceHubLevel?: number): Q
           ? 'Контракт кризиса'
           : event.type === 'prosperity'
             ? 'Директива подъёма'
+            : event.type === 'hub_founded'
+              ? 'Хартия основания'
             : event.type === 'hub_destroyed'
               ? 'Мандат на восстановление'
               : 'Досье чёрного рынка';
@@ -1330,28 +1623,29 @@ function applyEventQuestBranch(
     if (branch === 'support_a') {
       goals = [
         { type: 'kill', targetId: frontEnemy, targetCount: 3, currentCount: 0 },
-        { type: 'explore', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
-        ...(quest.eventQuest.opponentHubId ? [{ type: 'explore' as const, targetId: quest.eventQuest.opponentHubId, targetCount: 1, currentCount: 0 }] : []),
+        { type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
+        { type: 'donate', targetId: quest.eventQuest.targetHubId, targetCount: 110, currentCount: 0 },
       ];
       rewards = { xp: 230, gold: 145, items: [{ itemId: 'potion_large', quantity: 1 }] };
-      descriptionEn = `War support chain for ${hubNameEn}: hold the front, carry dispatch between allied hubs, and sustain war effort.`;
-      descriptionRu = `Военная цепочка поддержки для ${hubNameRu}: удержите фронт, доставьте депеши между хабами и поддержите военную кампанию.`;
+      descriptionEn = `War support chain for ${hubNameEn}: hold the front, deliver a dispatch, and fund the war chest.`;
+      descriptionRu = `Военная цепочка поддержки для ${hubNameRu}: удержите фронт, доставьте депешу и пополните военную казну.`;
     } else if (branch === 'support_b') {
       goals = [
         { type: 'kill', targetId: frontEnemy, targetCount: 3, currentCount: 0 },
-        ...(quest.eventQuest.opponentHubId ? [{ type: 'explore' as const, targetId: quest.eventQuest.opponentHubId, targetCount: 1, currentCount: 0 }] : []),
-        { type: 'collect', targetId: 'bandit_bandana', targetCount: 2, currentCount: 0 },
+        ...(quest.eventQuest.opponentHubId ? [{ type: 'deliver' as const, targetId: quest.eventQuest.opponentHubId, targetCount: 1, currentCount: 0 }] : []),
+        ...(quest.eventQuest.opponentHubId ? [{ type: 'donate' as const, targetId: quest.eventQuest.opponentHubId, targetCount: 110, currentCount: 0 }] : []),
       ];
       rewards = { xp: 235, gold: 150, items: [{ itemId: 'potion_energy', quantity: 2 }] };
-      descriptionEn = `Support ${opponentNameEn}: break enemy patrols, deliver dispatch, and secure wartime proof from skirmishes.`;
-      descriptionRu = `Поддержите ${opponentNameRu}: разбейте вражеские патрули, доставьте депешу и соберите доказательства боёв.`;
+      descriptionEn = `Support ${opponentNameEn}: break patrols, deliver a sealed letter, and finance the campaign.`;
+      descriptionRu = `Поддержите ${opponentNameRu}: разбейте патрули, доставьте запечатанное письмо и профинансируйте кампанию.`;
     } else {
       goals = [
-        { type: 'collect', targetId: 'bandit_bandana', targetCount: 1, currentCount: 0 },
+        { type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
+        ...(quest.eventQuest.opponentHubId ? [{ type: 'deliver' as const, targetId: quest.eventQuest.opponentHubId, targetCount: 1, currentCount: 0 }] : []),
       ];
       rewards = { xp: 95, gold: 55 };
-      descriptionEn = `Stay neutral: file a non-intervention report and avoid direct war support.`;
-      descriptionRu = `Сохраните нейтралитет: оформите отчёт о невмешательстве и избегайте прямой поддержки войны.`;
+      descriptionEn = `Stay neutral: deliver non-intervention notices to both war sides.`;
+      descriptionRu = `Сохраните нейтралитет: передайте уведомление о невмешательстве обеим сторонам войны.`;
     }
   } else if (quest.eventQuest.originType === 'caravan_attack') {
     const hubLevel = clamp(worldHubLevelForEventQuest(quest), 1, 5);
@@ -1359,16 +1653,50 @@ function applyEventQuestBranch(
     const enemyId = hubLevel >= 4 ? 'ash_bandit' : 'bandit';
     locationId = 'road_south';
     if (branch === 'support') {
+      const escort = buildEscortRoute(quest.eventQuest.targetHubId, killCount);
+      locationId = escort.originHubId;
       goals = [
         { type: 'kill', targetId: enemyId, targetCount: killCount, currentCount: 0 },
-        { type: 'collect', targetId: 'bandit_bandana', targetCount: Math.max(1, Math.floor(killCount / 2)), currentCount: 0 },
+        { type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
       ];
       rewards = { xp: 200 + killCount * 14, gold: 130 + killCount * 10, items: [{ itemId: 'potion_energy', quantity: 1 }] };
-      descriptionEn = `Escort-response operation: survive ${killCount} consecutive convoy fights and secure route evidence.`;
-      descriptionRu = `Операция защиты караванов: выдержите ${killCount} боёв подряд и соберите доказательства зачистки маршрута.`;
+      descriptionEn = `Escort-response operation: move convoy from ${LOCATIONS[escort.originHubId]?.name.en || escort.originHubId} to ${hubNameEn} via route (${escort.route.map((node) => LOCATIONS[node]?.name.en || node).join(' -> ')}), survive ${killCount} ambushes.`;
+      descriptionRu = `Операция защиты караванов: проведите караван из ${LOCATIONS[escort.originHubId]?.name.ru || escort.originHubId} в ${hubNameRu} по маршруту (${escort.route.map((node) => LOCATIONS[node]?.name.ru || node).join(' -> ')}), пережив ${killCount} засад.`;
+      return {
+        ...quest,
+        offerState: 'offered',
+        eventQuest: {
+          ...quest.eventQuest,
+          branch,
+          escort: {
+            originHubId: escort.originHubId,
+            targetHubId: quest.eventQuest.targetHubId,
+            route: escort.route,
+            currentLeg: 0,
+            ambushLocationIds: escort.ambushLocationIds,
+            clearedAmbushLocations: [],
+            pendingAmbushLocationId: undefined,
+            totalAmbushes: killCount,
+            perfectRun: true,
+          },
+        },
+        locationId,
+        name: {
+          en: `${quest.name.en.split(' — ')[0]} — ${branchLabelEn}`,
+          ru: `${quest.name.ru.split(' — ')[0]} — ${branchLabelRu}`,
+        },
+        description: {
+          en: descriptionEn,
+          ru: descriptionRu,
+        },
+        goals,
+        rewards,
+        isTurnInReady: false,
+      };
     } else if (branch === 'punish') {
       goals = [
         { type: 'kill', targetId: enemyId, targetCount: killCount, currentCount: 0 },
+        { type: 'collect', targetId: 'bandit_bandana', targetCount: Math.max(2, Math.floor(killCount / 2) + 1), currentCount: 0 },
       ];
       rewards = {
         xp: 220 + killCount * 16,
@@ -1382,11 +1710,11 @@ function applyEventQuestBranch(
       descriptionRu = `Налётная операция: уничтожьте ${killCount} охранных отрядов каравана и оставьте награбленное себе.`;
     } else {
       goals = [
-        { type: 'explore', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
+        { type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
       ];
       rewards = { xp: 80, gold: 45 };
-      descriptionEn = `Non-intervention stance: do not interfere with the convoy and simply report the route status.`;
-      descriptionRu = `Позиция невмешательства: не трогайте караван и просто передайте отчёт о состоянии маршрута.`;
+      descriptionEn = `Non-intervention stance: don't touch the caravan, only deliver a route status report.`;
+      descriptionRu = `Позиция невмешательства: не трогайте караван, только доставьте отчёт о состоянии маршрута.`;
     }
   } else if (quest.eventQuest.originType === 'crisis') {
     locationId = quest.eventQuest.targetHubId;
@@ -1394,38 +1722,59 @@ function applyEventQuestBranch(
       goals = [
         { type: 'collect', targetId: 'iron_ore', targetCount: 3, currentCount: 0 },
         { type: 'collect', targetId: 'hard_wood', targetCount: 3, currentCount: 0 },
-        { type: 'explore', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
+        { type: 'donate', targetId: quest.eventQuest.targetHubId, targetCount: 120, currentCount: 0 },
       ];
       rewards = { xp: 180, gold: 120, items: [{ itemId: 'potion_large', quantity: 1 }] };
-      descriptionEn = `Crisis relief: supply strategic materials and verify recovery at ${hubNameEn}.`;
-      descriptionRu = `Антикризисная миссия: доставьте стратегические материалы и подтвердите восстановление в ${hubNameRu}.`;
+      descriptionEn = `Crisis relief: supply strategic materials and transfer emergency treasury funds to ${hubNameEn}.`;
+      descriptionRu = `Антикризисная миссия: доставьте стратегические материалы и внесите экстренный взнос в казну ${hubNameRu}.`;
     } else {
       goals = [
         { type: 'kill', targetId: 'bandit', targetCount: 2, currentCount: 0 },
-        { type: 'collect', targetId: 'bandit_bandana', targetCount: 2, currentCount: 0 },
+        { type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
       ];
       rewards = { xp: 205, gold: 140, items: [{ itemId: 'bomb_fire', quantity: 1 }] };
-      descriptionEn = `Exploit crisis: disrupt stabilization channels and deepen local shortages.`;
-      descriptionRu = `Эксплуатация кризиса: сорвите каналы стабилизации и усилите локальный дефицит.`;
+      descriptionEn = `Exploit crisis: break stabilization squads and plant false directives inside ${hubNameEn}.`;
+      descriptionRu = `Эксплуатация кризиса: разбейте группы стабилизации и внедрите ложные директивы в ${hubNameRu}.`;
     }
   } else if (quest.eventQuest.originType === 'prosperity') {
     locationId = quest.eventQuest.targetHubId;
     if (branch === 'support') {
       goals = [
-        { type: 'explore', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
+        { type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
         { type: 'collect', targetId: 'crystal_shard', targetCount: 2, currentCount: 0 },
+        { type: 'donate', targetId: quest.eventQuest.targetHubId, targetCount: 90, currentCount: 0 },
       ];
       rewards = { xp: 170, gold: 135, items: [{ itemId: 'scroll_spear', quantity: 1 }] };
-      descriptionEn = `Growth pact: reinforce prosperous logistics and deliver arcane commodities.`;
-      descriptionRu = `Пакт роста: укрепите процветающую логистику и доставьте ценные арканические товары.`;
+      descriptionEn = `Growth pact: deliver trade contracts, bring arcane commodities, and co-invest in the treasury.`;
+      descriptionRu = `Пакт роста: доставьте торговые контракты, привезите арканические товары и соинвестируйте в казну.`;
     } else {
       goals = [
         { type: 'kill', targetId: 'ash_bandit', targetCount: 2, currentCount: 0 },
         { type: 'collect', targetId: 'ember_resin', targetCount: 2, currentCount: 0 },
+        { type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
       ];
       rewards = { xp: 195, gold: 150, items: [{ itemId: 'bomb_toxic', quantity: 1 }] };
-      descriptionEn = `Market sabotage: strike trade arteries and siphon high-value supplies.`;
-      descriptionRu = `Рыночный саботаж: ударьте по торговым артериям и перехватите ценные ресурсы.`;
+      descriptionEn = `Market sabotage: hit trade arteries, siphon valuables, and deliver forged price directives.`;
+      descriptionRu = `Рыночный саботаж: ударьте по торговым артериям, перехватите ценности и доставьте фальшивые ценовые директивы.`;
+    }
+  } else if (quest.eventQuest.originType === 'black_market_opened') {
+    locationId = quest.eventQuest.targetHubId;
+    if (branch === 'support') {
+      goals = [
+        { type: 'kill', targetId: 'bandit', targetCount: 2, currentCount: 0 },
+        { type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
+      ];
+      rewards = { xp: 175, gold: 120, items: [{ itemId: 'potion_antidote', quantity: 1 }] };
+      descriptionEn = `Anti-contraband operation: clear smuggler squads and deliver an enforcement order to ${hubNameEn}.`;
+      descriptionRu = `Антиконтрабандная операция: зачистите отряды контрабандистов и доставьте приказ о подавлении в ${hubNameRu}.`;
+    } else {
+      goals = [
+        { type: 'collect', targetId: 'ember_resin', targetCount: 3, currentCount: 0 },
+        { type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
+      ];
+      rewards = { xp: 195, gold: 165, items: [{ itemId: 'bomb_toxic', quantity: 1 }] };
+      descriptionEn = `Contraband patronage: secure illicit stock and deliver black-market access codes to ${hubNameEn}.`;
+      descriptionRu = `Покровительство контрабанде: соберите нелегальный товар и доставьте коды доступа на чёрный рынок ${hubNameRu}.`;
     }
   } else if (quest.eventQuest.originType === 'hub_destroyed') {
     locationId = quest.eventQuest.targetHubId;
@@ -1433,30 +1782,52 @@ function applyEventQuestBranch(
       goals = [
         { type: 'collect', targetId: 'hard_wood', targetCount: 4, currentCount: 0 },
         { type: 'collect', targetId: 'iron_ore', targetCount: 2, currentCount: 0 },
+        { type: 'donate', targetId: quest.eventQuest.targetHubId, targetCount: 140, currentCount: 0 },
       ];
       rewards = { xp: 210, gold: 120, items: [{ itemId: 'armor_iron', quantity: 1 }] };
-      descriptionEn = `Recovery mission: deliver reconstruction stockpiles for ${hubNameEn}.`;
-      descriptionRu = `Миссия восстановления: доставьте запасы для реконструкции ${hubNameRu}.`;
+      descriptionEn = `Recovery mission: deliver reconstruction stockpiles and emergency treasury aid for ${hubNameEn}.`;
+      descriptionRu = `Миссия восстановления: доставьте запасы для реконструкции и экстренную казну для ${hubNameRu}.`;
     } else {
       goals = [
         { type: 'kill', targetId: 'bandit', targetCount: 3, currentCount: 0 },
+        { type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
       ];
       rewards = { xp: 225, gold: 165, items: [{ itemId: 'bandit_bandana', quantity: 2 }] };
-      descriptionEn = `Opportunist strike: prevent rebuilding by forcing militant pressure.`;
-      descriptionRu = `Удар оппортуниста: сорвите восстановление, усилив давление налётчиков.`;
+      descriptionEn = `Opportunist strike: prevent rebuilding and deliver intimidation terms to block reconstruction.`;
+      descriptionRu = `Удар оппортуниста: сорвите восстановление и доставьте условия запугивания, блокируя реконструкцию.`;
+    }
+  } else if (quest.eventQuest.originType === 'hub_founded') {
+    locationId = quest.eventQuest.targetHubId;
+    if (branch === 'support') {
+      goals = [
+        { type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
+        { type: 'collect', targetId: 'hard_wood', targetCount: 3, currentCount: 0 },
+        { type: 'donate', targetId: quest.eventQuest.targetHubId, targetCount: 80, currentCount: 0 },
+      ];
+      rewards = { xp: 185, gold: 130, items: [{ itemId: 'potion_energy', quantity: 1 }] };
+      descriptionEn = `Founding support: deliver the charter, bring construction resources, and seed the new treasury.`;
+      descriptionRu = `Поддержка основания: доставьте хартию, привезите стройматериалы и заложите стартовую казну нового хаба.`;
+    } else {
+      goals = [
+        { type: 'kill', targetId: 'bandit', targetCount: 2, currentCount: 0 },
+        { type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 },
+      ];
+      rewards = { xp: 200, gold: 150, items: [{ itemId: 'bomb_fire', quantity: 1 }] };
+      descriptionEn = `Founding disruption: raid startup escorts and deliver sabotage directives before growth stabilizes.`;
+      descriptionRu = `Срыв основания: разбейте стартовые эскорты и доставьте саботажные директивы до стабилизации роста.`;
     }
   } else {
     locationId = quest.eventQuest.targetHubId;
-    goals = [{ type: 'explore', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 }];
+    goals = [{ type: 'deliver', targetId: quest.eventQuest.targetHubId, targetCount: 1, currentCount: 0 }];
     rewards = branch === 'support' ? { xp: 130, gold: 90 } : { xp: 150, gold: 105 };
     descriptionEn =
       branch === 'support'
-        ? `Deliver support policy to ${hubNameEn} and verify stabilization on site.`
-        : `Execute punitive policy against ${hubNameEn} and verify destabilization on site.`;
+        ? `Deliver support policy to ${hubNameEn} and execute local stabilization protocol.`
+        : `Execute punitive policy against ${hubNameEn} and trigger destabilization protocol.`;
     descriptionRu =
       branch === 'support'
-        ? `Проведите курс поддержки для ${hubNameRu} и подтвердите стабилизацию на месте.`
-        : `Проведите карательный курс против ${hubNameRu} и подтвердите дестабилизацию на месте.`;
+        ? `Проведите курс поддержки для ${hubNameRu} и запустите протокол стабилизации.`
+        : `Проведите карательный курс против ${hubNameRu} и запустите протокол дестабилизации.`;
   }
 
   return {
@@ -1465,6 +1836,7 @@ function applyEventQuestBranch(
     eventQuest: {
       ...quest.eventQuest,
       branch,
+      escort: undefined,
     },
     locationId,
     name: {
@@ -1543,6 +1915,134 @@ function buildFollowupEventQuest(resolvedQuest: Quest): Quest | null {
         ? [{ type: 'kill', targetId: 'ash_bandit', targetCount: 2, currentCount: 0 }]
         : [{ type: 'collect', targetId: 'bandit_bandana', targetCount: 1, currentCount: 0 }],
       rewards: isPunish ? { xp: 165, gold: 120 } : { xp: 120, gold: 95, items: [{ itemId: 'hard_wood', quantity: 2 }] },
+      isTurnInReady: false,
+      isCompleted: false,
+      expiresAtTick: undefined,
+      offerState: 'offered',
+      isEventQuest: true,
+      sourceEventId: `${resolvedQuest.sourceEventId || resolvedQuest.id}_followup`,
+      eventQuest: {
+        ...resolvedQuest.eventQuest,
+      },
+    };
+  }
+  if (resolvedQuest.eventQuest.originType === 'crisis') {
+    const isSupport = branch === 'support';
+    return {
+      id: baseId,
+      name: {
+        en: isSupport ? `Relief Audit: ${hub.name.en}` : `Crisis Spiral: ${hub.name.en}`,
+        ru: isSupport ? `Аудит помощи: ${hub.name.ru}` : `Спираль кризиса: ${hub.name.ru}`,
+      },
+      description: {
+        en: isSupport
+          ? `Inspect relief routes and submit stabilization paperwork.`
+          : `Your disruption caused shortages. Intercept response squads before they restore balance.`,
+        ru: isSupport
+          ? `Проверьте маршруты помощи и передайте документы стабилизации.`
+          : `Ваш саботаж вызвал дефицит. Перехватите ответные отряды до восстановления баланса.`,
+      },
+      locationId: hubId,
+      goals: isSupport
+        ? [{ type: 'deliver', targetId: hubId, targetCount: 1, currentCount: 0 }]
+        : [{ type: 'kill', targetId: 'bandit', targetCount: 2, currentCount: 0 }],
+      rewards: isSupport ? { xp: 110, gold: 80 } : { xp: 155, gold: 120 },
+      isTurnInReady: false,
+      isCompleted: false,
+      expiresAtTick: undefined,
+      offerState: 'offered',
+      isEventQuest: true,
+      sourceEventId: `${resolvedQuest.sourceEventId || resolvedQuest.id}_followup`,
+      eventQuest: {
+        ...resolvedQuest.eventQuest,
+      },
+    };
+  }
+  if (resolvedQuest.eventQuest.originType === 'prosperity') {
+    const isSupport = branch === 'support';
+    return {
+      id: baseId,
+      name: {
+        en: isSupport ? `Growth Oversight: ${hub.name.en}` : `Market Backlash: ${hub.name.en}`,
+        ru: isSupport ? `Надзор за ростом: ${hub.name.ru}` : `Откат рынка: ${hub.name.ru}`,
+      },
+      description: {
+        en: isSupport
+          ? `Sign expansion ledgers and secure prosperous routes from opportunistic raids.`
+          : `Merchants react to your sabotage. Sustain pressure before prices normalize.`,
+        ru: isSupport
+          ? `Подпишите реестры расширения и защитите процветающие маршруты от рейдов.`
+          : `Торговцы реагируют на ваш саботаж. Удерживайте давление до нормализации цен.`,
+      },
+      locationId: 'road_south',
+      goals: isSupport
+        ? [{ type: 'kill', targetId: 'bandit', targetCount: 2, currentCount: 0 }]
+        : [{ type: 'collect', targetId: 'ember_resin', targetCount: 2, currentCount: 0 }],
+      rewards: isSupport ? { xp: 120, gold: 85 } : { xp: 150, gold: 125 },
+      isTurnInReady: false,
+      isCompleted: false,
+      expiresAtTick: undefined,
+      offerState: 'offered',
+      isEventQuest: true,
+      sourceEventId: `${resolvedQuest.sourceEventId || resolvedQuest.id}_followup`,
+      eventQuest: {
+        ...resolvedQuest.eventQuest,
+      },
+    };
+  }
+  if (resolvedQuest.eventQuest.originType === 'black_market_opened') {
+    const isSupport = branch === 'support';
+    return {
+      id: baseId,
+      name: {
+        en: isSupport ? `Smuggler Crackdown: ${hub.name.en}` : `Contraband Relay: ${hub.name.en}`,
+        ru: isSupport ? `Зачистка контрабанды: ${hub.name.ru}` : `Контрабандный канал: ${hub.name.ru}`,
+      },
+      description: {
+        en: isSupport
+          ? `Track the remaining smugglers and complete the final seizure report.`
+          : `Expand illicit supply and deliver coded access papers.`,
+        ru: isSupport
+          ? `Отследите остатки контрабандистов и завершите итоговый отчёт об изъятии.`
+          : `Расширьте нелегальные поставки и доставьте кодированные бумаги доступа.`,
+      },
+      locationId: hubId,
+      goals: isSupport
+        ? [{ type: 'kill', targetId: 'bandit', targetCount: 2, currentCount: 0 }]
+        : [{ type: 'deliver', targetId: hubId, targetCount: 1, currentCount: 0 }],
+      rewards: isSupport ? { xp: 130, gold: 90 } : { xp: 165, gold: 130 },
+      isTurnInReady: false,
+      isCompleted: false,
+      expiresAtTick: undefined,
+      offerState: 'offered',
+      isEventQuest: true,
+      sourceEventId: `${resolvedQuest.sourceEventId || resolvedQuest.id}_followup`,
+      eventQuest: {
+        ...resolvedQuest.eventQuest,
+      },
+    };
+  }
+  if (resolvedQuest.eventQuest.originType === 'hub_founded' || resolvedQuest.eventQuest.originType === 'hub_destroyed') {
+    const isSupport = branch === 'support';
+    return {
+      id: baseId,
+      name: {
+        en: isSupport ? `Settlement Stabilization: ${hub.name.en}` : `Settlement Pressure: ${hub.name.en}`,
+        ru: isSupport ? `Стабилизация поселения: ${hub.name.ru}` : `Давление на поселение: ${hub.name.ru}`,
+      },
+      description: {
+        en: isSupport
+          ? `Finalize infrastructure papers and secure the nearest trade road.`
+          : `Push intimidation through local routes to prevent a stable recovery.`,
+        ru: isSupport
+          ? `Завершите инфраструктурные документы и защитите ближайший торговый тракт.`
+          : `Продвиньте давление по локальным маршрутам, чтобы не допустить стабильного восстановления.`,
+      },
+      locationId: 'road_south',
+      goals: isSupport
+        ? [{ type: 'deliver', targetId: hubId, targetCount: 1, currentCount: 0 }]
+        : [{ type: 'kill', targetId: 'bandit', targetCount: 2, currentCount: 0 }],
+      rewards: isSupport ? { xp: 125, gold: 95 } : { xp: 160, gold: 130 },
       isTurnInReady: false,
       isCompleted: false,
       expiresAtTick: undefined,
@@ -1675,23 +2175,42 @@ export const useGameStore = create<GameState>((set, get) => {
       && (q.offerState || 'active') === 'active'
       && q.isEventQuest
       && (q.eventQuest?.originType === 'war' || q.eventQuest?.originType === 'caravan_attack')
-      && q.locationId === locationId
+      && (
+        q.locationId === locationId
+        || (
+          q.eventQuest?.originType === 'caravan_attack'
+          && q.eventQuest?.branch === 'support'
+          && !!q.eventQuest.escort
+          && q.eventQuest.escort.route.includes(locationId)
+        )
+      )
+      && q.goals.some((g) => g.type === 'kill' && g.currentCount < g.targetCount),
+    ) || null;
+
+  const findAnyActiveCombatChainQuest = (quests: Quest[]): Quest | null =>
+    quests.find((q) =>
+      !q.isCompleted
+      && (q.offerState || 'active') === 'active'
+      && q.isEventQuest
+      && (q.eventQuest?.originType === 'war' || q.eventQuest?.originType === 'caravan_attack')
       && q.goals.some((g) => g.type === 'kill' && g.currentCount < g.targetCount),
     ) || null;
 
   const applyChainFailurePenalty = (
     state: GameState,
     playerSeed: Player,
-    reason: 'flee' | 'defeat',
+    reason: 'flee' | 'defeat' | 'abandon',
   ): { player: Player; quests: Quest[]; worldEconomy: WorldEconomyState; failureLog: string | null } => {
-    const chainQuest = findActiveCombatChainQuest(state.quests, state.currentLocationId);
+    const chainQuest = findActiveCombatChainQuest(state.quests, state.currentLocationId) || findAnyActiveCombatChainQuest(state.quests);
     if (!chainQuest || !chainQuest.eventQuest) {
       return { player: playerSeed, quests: state.quests, worldEconomy: state.worldEconomy, failureLog: null };
     }
     const lang = state.settings.language;
     const fine = reason === 'defeat'
       ? Math.min(80, Math.max(12, Math.floor(playerSeed.gold * 0.16)))
-      : Math.min(55, Math.max(8, Math.floor(playerSeed.gold * 0.1)));
+      : reason === 'flee'
+        ? Math.min(55, Math.max(8, Math.floor(playerSeed.gold * 0.1)))
+        : Math.min(70, Math.max(10, Math.floor(playerSeed.gold * 0.12)));
     const player = {
       ...playerSeed,
       gold: Math.max(0, playerSeed.gold - fine),
@@ -1715,8 +2234,16 @@ export const useGameStore = create<GameState>((set, get) => {
       player,
     );
     const failureLog = lang === 'ru'
-      ? `Срыв цепочки "${chainQuest.name.ru}": потеряно ${fine} золота и ухудшены отношения хабов.`
-      : `Chain failure "${chainQuest.name.en}": lost ${fine} gold and damaged hub relations.`;
+      ? (
+        reason === 'abandon'
+          ? `Цепочка "${chainQuest.name.ru}" провалена из-за выхода с маршрута: потеряно ${fine} золота и ухудшены отношения хабов.`
+          : `Срыв цепочки "${chainQuest.name.ru}": потеряно ${fine} золота и ухудшены отношения хабов.`
+      )
+      : (
+        reason === 'abandon'
+          ? `Chain "${chainQuest.name.en}" failed due to route abandonment: lost ${fine} gold and damaged hub relations.`
+          : `Chain failure "${chainQuest.name.en}": lost ${fine} gold and damaged hub relations.`
+      );
     return { player, quests, worldEconomy, failureLog };
   };
 
@@ -1913,7 +2440,16 @@ export const useGameStore = create<GameState>((set, get) => {
     });
 
     const progressedQuests = state.quests.map((q) => {
-      if (q.isCompleted || (q.offerState || 'active') !== 'active' || q.locationId !== state.currentLocationId) return q;
+      const locationMatches =
+        q.locationId === state.currentLocationId
+        || (
+          q.isEventQuest
+          && q.eventQuest?.originType === 'caravan_attack'
+          && q.eventQuest?.branch === 'support'
+          && !!q.eventQuest.escort
+          && q.eventQuest.escort.route.includes(state.currentLocationId)
+        );
+      if (q.isCompleted || (q.offerState || 'active') !== 'active' || !locationMatches) return q;
       let progressed = false;
       const goals = q.goals.map((g) => {
         if (g.type === 'kill' && g.targetId === enemy.id && g.currentCount < g.targetCount) {
@@ -1923,15 +2459,36 @@ export const useGameStore = create<GameState>((set, get) => {
         return g;
       });
       if (!progressed) return q;
+      let eventQuest = q.eventQuest;
+      if (
+        q.isEventQuest
+        && q.eventQuest?.originType === 'caravan_attack'
+        && q.eventQuest?.branch === 'support'
+        && q.eventQuest.escort
+        && q.eventQuest.escort.pendingAmbushLocationId
+      ) {
+        const pendingLoc = q.eventQuest.escort.pendingAmbushLocationId;
+        const cleared = q.eventQuest.escort.clearedAmbushLocations.includes(pendingLoc)
+          ? q.eventQuest.escort.clearedAmbushLocations
+          : [...q.eventQuest.escort.clearedAmbushLocations, pendingLoc];
+        eventQuest = {
+          ...q.eventQuest,
+          escort: {
+            ...q.eventQuest.escort,
+            clearedAmbushLocations: cleared,
+            pendingAmbushLocationId: undefined,
+          },
+        };
+      }
       const completed = goals.every((g) => g.currentCount >= g.targetCount);
-      if (!completed) return { ...q, goals, isTurnInReady: false };
+      if (!completed) return { ...q, goals, eventQuest, isTurnInReady: false };
 
       logs.push(
         lang === 'ru'
           ? `Цель задания достигнута: ${q.name[lang]}. Вернитесь к NPC для сдачи.`
           : `Quest objective complete: ${q.name[lang]}. Return to the quest giver to turn it in.`,
       );
-      return { ...q, goals, isTurnInReady: true };
+      return { ...q, goals, eventQuest, isTurnInReady: true };
     });
 
     player = applyLevelUps(player, lang, logs);
@@ -2183,6 +2740,48 @@ export const useGameStore = create<GameState>((set, get) => {
       get().saveGame();
     },
 
+    contributeToQuestTreasury: (questId, goldAmount) => {
+      const state = get();
+      const amount = Math.max(0, Math.floor(goldAmount));
+      if (amount <= 0) return;
+      const quest = state.quests.find((q) => q.id === questId);
+      if (!quest || quest.isCompleted || (quest.offerState || 'active') !== 'active') return;
+      const donateGoal = quest.goals.find((g) => g.type === 'donate' && g.currentCount < g.targetCount);
+      if (!donateGoal) return;
+      const remaining = donateGoal.targetCount - donateGoal.currentCount;
+      const spend = Math.min(amount, remaining, state.player.gold);
+      if (spend <= 0) return;
+
+      const player = {
+        ...state.player,
+        gold: state.player.gold - spend,
+      };
+      const updatedQuest: Quest = {
+        ...quest,
+        goals: quest.goals.map((g) =>
+          g === donateGoal
+            ? { ...g, currentCount: Math.min(g.targetCount, g.currentCount + spend) }
+            : g,
+        ),
+      };
+      let worldEconomy = state.worldEconomy;
+      const targetHubId = updatedQuest.eventQuest?.targetHubId;
+      if (targetHubId && worldEconomy.hubs[targetHubId]) {
+        worldEconomy = updateHubEconomy(worldEconomy, targetHubId, {
+          treasury: spend,
+          wealth: Math.max(1, Math.floor(spend * 0.6)),
+          stability: Math.max(1, Math.floor(spend / 70)),
+          playerRelation: Math.max(1, Math.floor(spend / 90)),
+        });
+      }
+      const quests = syncQuestStates(
+        state.quests.map((q) => (q.id === questId ? updatedQuest : q)),
+        player,
+      );
+      set({ player, quests, worldEconomy });
+      get().saveGame();
+    },
+
     turnInQuest: (questId, npcId) => {
       const state = get();
       const quest = state.quests.find((q) => q.id === questId);
@@ -2211,6 +2810,22 @@ export const useGameStore = create<GameState>((set, get) => {
         const targetHubId = quest.eventQuest.targetHubId;
         const otherHubId = quest.eventQuest.opponentHubId;
         const branch = quest.eventQuest.branch;
+        const dueIn = 1 + Math.floor(Math.random() * 3);
+        if (
+          quest.eventQuest.originType === 'caravan_attack'
+          && branch === 'support'
+          && quest.eventQuest.escort
+          && quest.eventQuest.escort.perfectRun
+          && quest.eventQuest.escort.clearedAmbushLocations.length >= 1
+        ) {
+          player.gold += 90;
+          player = addItem(player, 'potion_large', 1).player;
+          logs.push(
+            state.settings.language === 'ru'
+              ? 'Идеальное сопровождение: +90 золота и премиальное зелье за сохранность каравана.'
+              : 'Perfect escort: +90 gold and a premium potion for keeping the convoy intact.',
+          );
+        }
         if (worldEconomy.hubs[targetHubId]) {
           if (branch === 'support' || branch === 'support_a') {
             worldEconomy = updateHubEconomy(worldEconomy, targetHubId, {
@@ -2220,13 +2835,44 @@ export const useGameStore = create<GameState>((set, get) => {
               demand: -3,
               supply: 4,
             });
+            worldEconomy = appendReputationLog(worldEconomy, {
+              hubId: targetHubId,
+              delta: 9,
+              reason: 'Supported local war economy and supply effort',
+              source: 'quest_resolution',
+              relatedHubId: otherHubId,
+            });
             if (otherHubId && worldEconomy.hubs[otherHubId]) {
               worldEconomy = updateHubEconomy(worldEconomy, otherHubId, {
                 playerRelation: -8,
                 stability: -2,
               });
+              worldEconomy = appendReputationLog(worldEconomy, {
+                hubId: otherHubId,
+                delta: -8,
+                reason: 'Backed opposing side in conflict',
+                source: 'quest_resolution',
+                relatedHubId: targetHubId,
+              });
               worldEconomy = updateHubRelation(worldEconomy, targetHubId, otherHubId, 8);
+              worldEconomy = queueEconomyConsequence(worldEconomy, {
+                dueTick: worldEconomy.tick + dueIn,
+                originQuestId: quest.id,
+                triggerHubId: otherHubId,
+                targetHubId,
+                kind: 'retaliation',
+                intensity: 58,
+                sourceBranch: branch,
+              });
             }
+            worldEconomy = queueEconomyConsequence(worldEconomy, {
+              dueTick: worldEconomy.tick + dueIn,
+              originQuestId: quest.id,
+              triggerHubId: targetHubId,
+              kind: 'aid_arrival',
+              intensity: 52,
+              sourceBranch: branch,
+            });
           } else if (branch === 'support_b' && otherHubId && worldEconomy.hubs[otherHubId]) {
             worldEconomy = updateHubEconomy(worldEconomy, otherHubId, {
               wealth: 40,
@@ -2235,20 +2881,75 @@ export const useGameStore = create<GameState>((set, get) => {
               demand: -3,
               supply: 4,
             });
+            worldEconomy = appendReputationLog(worldEconomy, {
+              hubId: otherHubId,
+              delta: 9,
+              reason: 'Supported requested side in active war',
+              source: 'quest_resolution',
+              relatedHubId: targetHubId,
+            });
             worldEconomy = updateHubEconomy(worldEconomy, targetHubId, {
               playerRelation: -8,
               stability: -2,
             });
+            worldEconomy = appendReputationLog(worldEconomy, {
+              hubId: targetHubId,
+              delta: -8,
+              reason: 'Chose rival side in war',
+              source: 'quest_resolution',
+              relatedHubId: otherHubId,
+            });
             worldEconomy = updateHubRelation(worldEconomy, targetHubId, otherHubId, 8);
+            worldEconomy = queueEconomyConsequence(worldEconomy, {
+              dueTick: worldEconomy.tick + dueIn,
+              originQuestId: quest.id,
+              triggerHubId: targetHubId,
+              targetHubId: otherHubId,
+              kind: 'retaliation',
+              intensity: 58,
+              sourceBranch: branch,
+            });
+            worldEconomy = queueEconomyConsequence(worldEconomy, {
+              dueTick: worldEconomy.tick + dueIn,
+              originQuestId: quest.id,
+              triggerHubId: otherHubId,
+              targetHubId,
+              kind: 'aid_arrival',
+              intensity: 52,
+              sourceBranch: branch,
+            });
           } else if (branch === 'neutral') {
             worldEconomy = updateHubEconomy(worldEconomy, targetHubId, {
               playerRelation: -3,
+            });
+            worldEconomy = appendReputationLog(worldEconomy, {
+              hubId: targetHubId,
+              delta: -3,
+              reason: 'Stayed neutral during strategic conflict',
+              source: 'quest_resolution',
+              relatedHubId: otherHubId,
             });
             if (otherHubId && worldEconomy.hubs[otherHubId]) {
               worldEconomy = updateHubEconomy(worldEconomy, otherHubId, {
                 playerRelation: -3,
               });
+              worldEconomy = appendReputationLog(worldEconomy, {
+                hubId: otherHubId,
+                delta: -3,
+                reason: 'Refused to intervene in conflict',
+                source: 'quest_resolution',
+                relatedHubId: targetHubId,
+              });
               worldEconomy = updateHubRelation(worldEconomy, targetHubId, otherHubId, -4);
+              worldEconomy = queueEconomyConsequence(worldEconomy, {
+                dueTick: worldEconomy.tick + dueIn,
+                originQuestId: quest.id,
+                triggerHubId: targetHubId,
+                targetHubId: otherHubId,
+                kind: 'tariff_relief',
+                intensity: 35,
+                sourceBranch: branch,
+              });
             }
           } else if (branch === 'punish') {
             worldEconomy = updateHubEconomy(worldEconomy, targetHubId, {
@@ -2257,6 +2958,20 @@ export const useGameStore = create<GameState>((set, get) => {
               playerRelation: -10,
               demand: 4,
               supply: -4,
+            });
+            worldEconomy = appendReputationLog(worldEconomy, {
+              hubId: targetHubId,
+              delta: -10,
+              reason: 'Punished hub infrastructure and economic capacity',
+              source: 'quest_resolution',
+            });
+            worldEconomy = queueEconomyConsequence(worldEconomy, {
+              dueTick: worldEconomy.tick + dueIn,
+              originQuestId: quest.id,
+              triggerHubId: targetHubId,
+              kind: quest.eventQuest.originType === 'black_market_opened' ? 'smuggler_crackdown' : 'retaliation',
+              intensity: 62,
+              sourceBranch: branch,
             });
           }
         }
@@ -2320,7 +3035,14 @@ export const useGameStore = create<GameState>((set, get) => {
         targetHubId: currentHubId !== hubId ? currentHubId : undefined,
         intensity: 61,
       });
-      set({ worldEconomy: withEvent });
+      const withLog = appendReputationLog(withEvent, {
+        hubId,
+        delta: -8,
+        reason: 'You raided a caravan linked to this hub',
+        source: 'player_action',
+        relatedHubId: currentHubId !== hubId ? currentHubId : undefined,
+      });
+      set({ worldEconomy: withLog });
       get().saveGame();
     },
 
@@ -2344,7 +3066,13 @@ export const useGameStore = create<GameState>((set, get) => {
         hubId,
         intensity: clamp(Math.floor(amount / 8), 8, 90),
       });
-      set({ player, worldEconomy: withEvent });
+      const withLog = appendReputationLog(withEvent, {
+        hubId,
+        delta: Math.max(1, Math.floor(amount / 45)),
+        reason: 'You invested funds into hub treasury and production',
+        source: 'player_action',
+      });
+      set({ player, worldEconomy: withLog });
       get().saveGame();
     },
 
@@ -2365,7 +3093,14 @@ export const useGameStore = create<GameState>((set, get) => {
         targetHubId: currentHubId !== hubId ? currentHubId : undefined,
         intensity: 42,
       });
-      set({ worldEconomy: withEvent });
+      const withLog = appendReputationLog(withEvent, {
+        hubId,
+        delta: 6,
+        reason: 'You negotiated diplomatic concessions',
+        source: 'player_action',
+        relatedHubId: currentHubId !== hubId ? currentHubId : undefined,
+      });
+      set({ worldEconomy: withLog });
       get().saveGame();
     },
 
@@ -2385,7 +3120,13 @@ export const useGameStore = create<GameState>((set, get) => {
         hubId,
         intensity: 74,
       });
-      set({ worldEconomy: withEvent });
+      const withLog = appendReputationLog(withEvent, {
+        hubId,
+        delta: -12,
+        reason: 'You sabotaged production and logistics',
+        source: 'player_action',
+      });
+      set({ worldEconomy: withLog });
       get().saveGame();
     },
 
@@ -2499,14 +3240,41 @@ export const useGameStore = create<GameState>((set, get) => {
     travelTo: (locationId) => {
       get().tickWeather();
       const state = get();
+      const activeChain = findAnyActiveCombatChainQuest(state.quests);
+      const escortRoute = activeChain?.eventQuest?.escort?.route || [];
+      const leavingValidEscortRoute =
+        !!activeChain
+        && activeChain.eventQuest?.originType === 'caravan_attack'
+        && activeChain.eventQuest?.branch === 'support'
+        && escortRoute.length > 0
+        && escortRoute.includes(locationId);
+      if (
+        activeChain
+        && (
+          activeChain.locationId === state.currentLocationId
+          || escortRoute.includes(state.currentLocationId)
+        )
+        && locationId !== state.currentLocationId
+        && !leavingValidEscortRoute
+      ) {
+        const penalized = applyChainFailurePenalty(state, state.player, 'abandon');
+        set({
+          player: penalized.player,
+          quests: penalized.quests,
+          worldEconomy: penalized.worldEconomy,
+          combatLogs: penalized.failureLog ? [penalized.failureLog] : state.combatLogs,
+        });
+        get().saveGame();
+      }
+      const freshState = get();
       const targetLoc = LOCATIONS[locationId];
-      const lang = state.settings.language;
-      let player = { ...state.player };
-      let codexUnlocks = unlockCodex(state.codexUnlocks, 'locations', locationId);
-      let worldEconomy = simulateWorldEconomyTick(state.worldEconomy, state.currentWeather);
+      const lang = freshState.settings.language;
+      let player = { ...freshState.player };
+      let codexUnlocks = unlockCodex(freshState.codexUnlocks, 'locations', locationId);
+      let worldEconomy = simulateWorldEconomyTick(freshState.worldEconomy, freshState.currentWeather);
       const expansion = expandHubsIfEligible(worldEconomy);
       worldEconomy = expansion.worldEconomy;
-      const questsWithEvents = withGeneratedEventQuests(state.quests, worldEconomy);
+      const questsWithEvents = withGeneratedEventQuests(freshState.quests, worldEconomy);
       let encounterChance = 0.3;
       const weatherFx = WEATHER[state.currentWeather].exploreEffect;
       if (weatherFx?.encounterChanceMod) encounterChance += weatherFx.encounterChanceMod;
@@ -2526,15 +3294,73 @@ export const useGameStore = create<GameState>((set, get) => {
         if (q.isCompleted || (q.offerState || 'active') !== 'active') return q;
         const goals = q.goals.map((g) => {
           if (g.type === 'explore' && g.targetId === locationId && g.currentCount < g.targetCount) return { ...g, currentCount: g.currentCount + 1 };
+          if (g.type === 'deliver' && g.targetId === locationId && g.currentCount < g.targetCount) return { ...g, currentCount: g.currentCount + 1 };
           return g;
         });
         return { ...q, goals };
       });
-      const nextQuests = syncQuestStates(progressedQuests, state.player);
+      let routeLogs: string[] = [];
+      let forcedAmbushEnemy: Enemy | null = null;
+      const escortAdjustedQuests = progressedQuests.map((q) => {
+        if (
+          q.isCompleted
+          || (q.offerState || 'active') !== 'active'
+          || !q.isEventQuest
+          || q.eventQuest?.originType !== 'caravan_attack'
+          || q.eventQuest?.branch !== 'support'
+          || !q.eventQuest.escort
+        ) {
+          return q;
+        }
+        const escort = q.eventQuest.escort;
+        const routeIndex = escort.route.indexOf(locationId);
+        let nextEscort = { ...escort };
+        if (routeIndex >= 0 && routeIndex > escort.currentLeg) {
+          nextEscort.currentLeg = routeIndex;
+          routeLogs.push(
+            lang === 'ru'
+              ? `Караван продвинулся по маршруту: этап ${routeIndex + 1}/${escort.route.length}.`
+              : `Convoy advanced on route: stage ${routeIndex + 1}/${escort.route.length}.`,
+          );
+        } else if (routeIndex < 0 && locationId !== q.eventQuest.targetHubId && escort.perfectRun) {
+          nextEscort.perfectRun = false;
+          routeLogs.push(
+            lang === 'ru'
+              ? 'Маршрут сопровождения нарушен: идеальный бонус больше недоступен.'
+              : 'Escort route was broken: perfect-run bonus is no longer available.',
+          );
+        }
+        const ambushPending = nextEscort.pendingAmbushLocationId === locationId;
+        const ambushRequired = nextEscort.ambushLocationIds.includes(locationId)
+          && !nextEscort.clearedAmbushLocations.includes(locationId)
+          && !nextEscort.pendingAmbushLocationId;
+        if (ambushRequired || ambushPending) {
+          nextEscort.pendingAmbushLocationId = locationId;
+          const hubLevel = clamp(worldHubLevelForEventQuest(q), 1, 5);
+          const enemyId = hubLevel >= 4 ? 'ash_bandit' : 'bandit';
+          forcedAmbushEnemy = ENEMIES[enemyId];
+          routeLogs.push(
+            lang === 'ru'
+              ? `Засада на маршруте! Защитите караван у ${targetLoc.name[lang]}.`
+              : `Route ambush! Defend the convoy near ${targetLoc.name[lang]}.`,
+          );
+        }
+        return {
+          ...q,
+          eventQuest: {
+            ...q.eventQuest,
+            escort: nextEscort,
+          },
+        };
+      });
+      const nextQuests = syncQuestStates(escortAdjustedQuests, player);
 
-      if (targetLoc.possibleEnemies && Math.random() < encounterChance) {
-        const enemyId = targetLoc.possibleEnemies[Math.floor(Math.random() * targetLoc.possibleEnemies.length)];
-        const enemyTemplate = ENEMIES[enemyId];
+      const enemyTemplate = forcedAmbushEnemy
+        || (targetLoc.possibleEnemies && Math.random() < encounterChance
+          ? ENEMIES[targetLoc.possibleEnemies[Math.floor(Math.random() * targetLoc.possibleEnemies.length)]]
+          : null);
+      if (enemyTemplate) {
+        const enemyId = enemyTemplate.id;
         codexUnlocks = unlockCodex(codexUnlocks, 'enemies', enemyId);
         const logs = [
           !wasDiscovered
@@ -2542,7 +3368,10 @@ export const useGameStore = create<GameState>((set, get) => {
               ? `Открыта новая локация: ${targetLoc.name[lang]} (+30 XP, +18 золота).`
               : `Discovered new location: ${targetLoc.name[lang]} (+30 XP, +18 gold).`
             : '',
-          lang === 'ru' ? `На вас напал ${enemyTemplate.name[lang]} во время путешествия!` : `You were ambushed by a ${enemyTemplate.name[lang]} while traveling!`,
+          ...(routeLogs.length > 0 ? routeLogs : []),
+          forcedAmbushEnemy
+            ? (lang === 'ru' ? `Караван атакован: ${enemyTemplate.name[lang]} выходит на перехват!` : `Convoy attacked: ${enemyTemplate.name[lang]} intercepts the route!`)
+            : (lang === 'ru' ? `На вас напал ${enemyTemplate.name[lang]} во время путешествия!` : `You were ambushed by a ${enemyTemplate.name[lang]} while traveling!`),
         ].filter(Boolean) as string[];
         if (expansion.spawnedHubId && LOCATIONS[expansion.spawnedHubId]) {
           logs.push(
@@ -2560,6 +3389,7 @@ export const useGameStore = create<GameState>((set, get) => {
         const logs = !wasDiscovered
           ? [lang === 'ru' ? `Открыта новая локация: ${targetLoc.name[lang]} (+30 XP, +18 золота).` : `Discovered new location: ${targetLoc.name[lang]} (+30 XP, +18 gold).`]
           : [];
+        logs.push(...routeLogs);
         if (expansion.spawnedHubId && LOCATIONS[expansion.spawnedHubId]) {
           logs.push(
             lang === 'ru'
@@ -2571,7 +3401,7 @@ export const useGameStore = create<GameState>((set, get) => {
         if (targetLoc.type === 'hub') {
           worldEconomy = updateHubEconomy(worldEconomy, locationId, { wealth: 8, stability: 1, playerRelation: 1 });
         }
-        set({ player, currentLocationId: locationId, status: targetLoc.type === 'hub' ? 'hub' : 'exploring', quests: nextQuests, codexUnlocks, worldEconomy, combatLogs: logs.length > 0 ? logs : state.combatLogs });
+        set({ player, currentLocationId: locationId, status: targetLoc.type === 'hub' ? 'hub' : 'exploring', quests: nextQuests, codexUnlocks, worldEconomy, combatLogs: logs.length > 0 ? logs : freshState.combatLogs });
       }
       get().saveGame();
     },
@@ -2581,6 +3411,28 @@ export const useGameStore = create<GameState>((set, get) => {
       const state = get();
       const loc = LOCATIONS[state.currentLocationId];
       if (loc.type === 'hub') return;
+      const chainQuest = findActiveCombatChainQuest(state.quests, state.currentLocationId);
+      const pendingChainGoal = chainQuest?.goals.find((g) => g.type === 'kill' && g.currentCount < g.targetCount);
+      if (pendingChainGoal) {
+        const forcedEnemy = ENEMIES[pendingChainGoal.targetId];
+        if (forcedEnemy) {
+          const lang = state.settings.language;
+          set({
+            status: 'combat',
+            currentEnemy: buildEnemy(forcedEnemy),
+            combatLogs: [
+              lang === 'ru'
+                ? `Цепочка боя продолжается: этап ${pendingChainGoal.currentCount + 1}/${pendingChainGoal.targetCount}.`
+                : `Combat chain continues: stage ${pendingChainGoal.currentCount + 1}/${pendingChainGoal.targetCount}.`,
+            ],
+            isPlayerBlocking: false,
+            combatCombo: 0,
+            combatAdrenaline: 0,
+          });
+          get().saveGame();
+          return;
+        }
+      }
       const fatigueFactor = getFatigueFactor(state.player);
       let codexUnlocks = unlockCodex(state.codexUnlocks, 'locations', state.currentLocationId);
       let worldEconomy = simulateWorldEconomyTick(state.worldEconomy, state.currentWeather);
@@ -2661,16 +3513,55 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     camp: () => {
+      const state = get();
+      const chainQuest = findActiveCombatChainQuest(state.quests, state.currentLocationId);
+      if (chainQuest) {
+        set({
+          combatLogs: [
+            ...(state.combatLogs || []),
+            state.settings.language === 'ru'
+              ? 'Нельзя разбить лагерь во время активной боевой цепочки.'
+              : 'You cannot camp while a combat chain is active.',
+          ],
+        });
+        return;
+      }
       set({ status: 'camp' });
       get().saveGame();
     },
 
     breakCamp: () => {
+      const state = get();
+      const chainQuest = findActiveCombatChainQuest(state.quests, state.currentLocationId);
+      if (chainQuest) {
+        set({
+          combatLogs: [
+            ...(state.combatLogs || []),
+            state.settings.language === 'ru'
+              ? 'Сначала завершите боевую цепочку по контракту.'
+              : 'Finish the contract combat chain first.',
+          ],
+        });
+        return;
+      }
       set({ status: 'exploring' });
       get().saveGame();
     },
 
     rest: () => {
+      const state = get();
+      const chainQuest = findActiveCombatChainQuest(state.quests, state.currentLocationId);
+      if (chainQuest) {
+        set({
+          combatLogs: [
+            ...(state.combatLogs || []),
+            state.settings.language === 'ru'
+              ? 'Отдых недоступен: у вас незавершённая боевая цепочка.'
+              : 'Rest is unavailable while you have an unfinished combat chain.',
+          ],
+        });
+        return;
+      }
       set((state) => ({
         player: {
           ...state.player,

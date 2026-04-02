@@ -506,6 +506,93 @@ Sabotage:
 - Quests UI now includes war-side relation card:
   - side A / side B relation-to-player readout,
   - inter-side relation status/strength snapshot from `hubRelations`.
+
+### 13.12 Full Completion Pass (No Return Required)
+- Event quest objective model expanded with explicit objective types:
+  - `deliver` (dispatch/report delivery to target hub),
+  - `donate` (direct treasury funding objective in gold).
+- Added dedicated gameplay action for treasury objectives:
+  - store API `contributeToQuestTreasury(questId, amount)` now spends player gold, progresses `donate` goal, and updates hub treasury/wealth/stability/relation.
+  - Quests UI now includes direct donation buttons (`25`, `50`, `max`) on active quests with treasury goals.
+
+- War event branches now use mixed mission chains exactly as requested:
+  - combat chain,
+  - dispatch delivery objective,
+  - treasury support objective for chosen side.
+  - neutral branch implemented as two-sided non-intervention notice delivery.
+
+- Caravan branch logic now fully supports attack/escort/ignore:
+  - attack and escort paths keep scaled `3-6` chained fights by hub level source,
+  - escort path includes actual destination delivery objective,
+  - ignore path uses non-intervention route report delivery.
+
+- Crisis/prosperity/destroyed/founded/black-market event templates were deepened:
+  - each now uses mixed objective sets (combat + delivery + collection + treasury funding where relevant),
+  - no more flat/generic one-step event templates for these categories.
+
+- Event-offer generation now also includes `hub_founded` events:
+  - founded-hub contracts are generated and branchable like other economy events.
+
+- Follow-up chain generation expanded beyond war/caravan:
+  - added follow-up offers for crisis, prosperity, black market, and settlement states (founded/destroyed),
+  - existing anti-recursion guard preserved.
+
+- Anti-bypass enforcement for combat chains is now stricter:
+  - leaving the active chain route before completion triggers immediate chain failure (`abandon`) with penalties and quest expiration.
+  - camp/rest/break-camp actions are blocked while a local combat chain is active.
+  - explore action now force-starts the pending chain stage enemy instead of allowing random bypass flow.
+
+- Delivery progression integrated into travel:
+  - `deliver` goals now auto-progress when player reaches target location.
+
+### 13.13 Contract Acceptance Screen + Real Escort Route (Requested 1+2)
+- Implemented dedicated contract acceptance modal in Quests UI:
+  - Offers now open through "Open contract board" before branch selection.
+  - Modal includes per-branch consequence forecast (reputation, market pressure, risk profile).
+  - Branch selection is made in modal; after selection player confirms via `Accept contract`.
+
+- Caravan escort upgraded from abstract chain to route gameplay:
+  - On branch `support`, escort contract now builds an explicit route between hubs (origin -> waypoints -> target).
+  - Route progress is tracked in quest metadata (`currentLeg`, route nodes, ambush points, perfect-run flag).
+  - Ambushes trigger on route travel points and force convoy combat interception.
+  - Active quest panel now shows route stage progress, ambush progress, and perfect-run status.
+  - Escort chain supports bonus reward on turn-in when perfect run is preserved.
+
+- Combat-chain + escort integration hardening:
+  - Chain detection now recognizes caravan escort route locations (not just static quest location id).
+  - Chain abandonment rules allow valid movement along escort route but penalize route exit.
+  - Combat chain indicator now also works on escort route nodes.
+
+### 13.14 Delayed Consequences + Reputation Journal (Requested 3+4)
+- Implemented delayed world consequences system:
+  - `worldEconomy.pendingConsequences` queue added to save/state model.
+  - Event-quest resolution now schedules follow-up effects in `+1..+3` ticks.
+  - Supported delayed consequence kinds:
+    - `retaliation`
+    - `aid_arrival`
+    - `tariff_relief`
+    - `smuggler_crackdown`
+  - `simulateWorldEconomyTick` now resolves due consequences automatically and applies economy/relation changes.
+  - Consequence outcomes are surfaced as economy events and visible in notifications.
+
+- Extended economy event types for delayed aftermath visibility:
+  - `retaliation`, `aid_arrival`, `tariff_relief`.
+
+- Added persistent faction reputation history:
+  - `worldEconomy.reputationLog` added to save/state model.
+  - Reputation changes now log reason/source/hub/tick metadata.
+  - Sources currently logged:
+    - event-quest resolution branch impact,
+    - delayed consequence impact,
+    - direct player actions (`invest`, `diplomacy`, `raid`, `sabotage`).
+
+- Added dedicated Reputation Journal UI:
+  - New panel: `client/src/components/game/FactionJournalPanel.tsx`.
+  - Integrated as new tab in desktop and mobile navigation.
+  - Includes:
+    - threshold table (hostile -> trusted ally) with gameplay effects,
+    - current standings per hub (relation score + tier),
+    - chronological reputation change history with reasons.
 - Bestiary:
   - client/src/components/game/BestiaryPanel.tsx
 - Audio manifest:

@@ -227,7 +227,7 @@ export interface Player {
 }
 
 export interface QuestGoal {
-  type: "kill" | "explore" | "collect";
+  type: "kill" | "explore" | "collect" | "deliver" | "donate";
   targetId: string;
   targetCount: number;
   currentCount: number;
@@ -259,6 +259,17 @@ export interface Quest {
     opponentHubId?: string;
     sourceHubLevel?: number;
     branch: "unselected" | "support" | "punish" | "support_a" | "support_b" | "neutral";
+    escort?: {
+      originHubId: string;
+      targetHubId: string;
+      route: string[];
+      currentLeg: number;
+      ambushLocationIds: string[];
+      clearedAmbushLocations: string[];
+      pendingAmbushLocationId?: string;
+      totalAmbushes: number;
+      perfectRun: boolean;
+    };
   };
   isTurnInReady?: boolean;
   isCompleted: boolean;
@@ -370,6 +381,9 @@ export interface WorldEconomyEvent {
     | "black_market_opened"
     | "hub_destroyed"
     | "hub_founded"
+    | "retaliation"
+    | "aid_arrival"
+    | "tariff_relief"
     | "player_raid"
     | "player_investment"
     | "player_diplomacy"
@@ -377,6 +391,27 @@ export interface WorldEconomyEvent {
   hubId: string;
   targetHubId?: string;
   intensity: number;
+}
+
+export interface ReputationLogEntry {
+  id: string;
+  tick: number;
+  hubId: string;
+  delta: number;
+  reason: string;
+  source: "quest_resolution" | "delayed_consequence" | "player_action";
+  relatedHubId?: string;
+}
+
+export interface PendingEconomyConsequence {
+  id: string;
+  dueTick: number;
+  originQuestId: string;
+  triggerHubId: string;
+  targetHubId?: string;
+  kind: "retaliation" | "aid_arrival" | "tariff_relief" | "smuggler_crackdown";
+  intensity: number;
+  sourceBranch: "support" | "punish" | "support_a" | "support_b" | "neutral";
 }
 
 export interface WorldEconomyState {
@@ -391,6 +426,8 @@ export interface WorldEconomyState {
   }>;
   spawnedHubIds: string[];
   events: WorldEconomyEvent[];
+  pendingConsequences: PendingEconomyConsequence[];
+  reputationLog: ReputationLogEntry[];
 }
 
 export interface SaveData {

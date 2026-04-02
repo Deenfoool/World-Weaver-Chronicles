@@ -3,7 +3,7 @@ import { useGameStore } from '../../game/store';
 import { LOCATIONS, WEATHER, ITEMS, CLASSES, SKILLS } from '../../game/constants';
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { LogOut, Save, Shield, Sword, Heart, Coins, User, Backpack, Map as MapIcon, Settings as SettingsIcon, Swords, Star, Hammer, Tent, Cloud, Sun, CloudRain, CloudLightning, Snowflake, Zap, Weight, BookMarked, Sparkles } from 'lucide-react';
+import { LogOut, Save, Shield, Sword, Heart, Coins, User, Backpack, Map as MapIcon, Settings as SettingsIcon, Swords, Star, Hammer, Tent, Cloud, Sun, CloudRain, CloudLightning, Snowflake, Zap, Weight, BookMarked, Sparkles, Scale } from 'lucide-react';
 import CombatScreen from './CombatScreen';
 import LocationScreen from './LocationScreen';
 import InventoryPanel from './InventoryPanel';
@@ -12,6 +12,7 @@ import SettingsPanel from './SettingsPanel';
 import SkillsPanel from './SkillsPanel';
 import CraftingPanel from './CraftingPanel';
 import BestiaryPanel from './BestiaryPanel';
+import FactionJournalPanel from './FactionJournalPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { T } from '../../game/translations';
 import { CharacterCreationBonuses } from '../../game/store';
@@ -79,6 +80,24 @@ function buildEconomyNotice(
         title: lang === 'ru' ? 'Экономический подъём' : 'Economic Prosperity',
         body: lang === 'ru' ? `${hubName} на волне роста и стабильности.` : `${hubName} is surging with growth and stability.`,
         tone: 'good',
+      };
+    case 'retaliation':
+      return {
+        title: lang === 'ru' ? 'Ответные меры' : 'Retaliation',
+        body: lang === 'ru' ? `${hubName}: последствия прошлых решений ударили по региону.` : `${hubName}: delayed consequences of earlier choices struck the region.`,
+        tone: 'bad',
+      };
+    case 'aid_arrival':
+      return {
+        title: lang === 'ru' ? 'Прибыла помощь' : 'Aid Arrived',
+        body: lang === 'ru' ? `${hubName}: прибыли ресурсы восстановления.` : `${hubName}: reconstruction aid has arrived.`,
+        tone: 'good',
+      };
+    case 'tariff_relief':
+      return {
+        title: lang === 'ru' ? 'Снижение тарифов' : 'Tariff Relief',
+        body: lang === 'ru' ? `${hubName}: торговое давление ослабло.` : `${hubName}: trade pressure has eased.`,
+        tone: 'neutral',
       };
     default:
       return null;
@@ -819,11 +838,12 @@ export default function GameLayout() {
         {/* Tabs */}
         <Tabs value={desktopTab} onValueChange={setDesktopTab} className="flex-1 flex flex-col min-h-0 mt-2">
           <div className="px-4 shrink-0">
-            <TabsList className="grid w-full grid-cols-7 bg-black/50 border border-white/5 h-12">
+            <TabsList className="grid w-full grid-cols-8 bg-black/50 border border-white/5 h-12">
               <TabsTrigger value="character" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><User className="w-4 h-4"/></TabsTrigger>
               <TabsTrigger value="skills" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><Star className="w-4 h-4"/></TabsTrigger>
               <TabsTrigger value="inventory" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><Backpack className="w-4 h-4"/></TabsTrigger>
               <TabsTrigger value="quests" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><MapIcon className="w-4 h-4"/></TabsTrigger>
+              <TabsTrigger value="reputation" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><Scale className="w-4 h-4"/></TabsTrigger>
               <TabsTrigger value="crafting" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><Hammer className="w-4 h-4"/></TabsTrigger>
               <TabsTrigger value="bestiary" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><BookMarked className="w-4 h-4"/></TabsTrigger>
               <TabsTrigger value="settings" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><SettingsIcon className="w-4 h-4"/></TabsTrigger>
@@ -834,6 +854,7 @@ export default function GameLayout() {
             <TabsContent value="skills" className="m-0"><SkillsPanel /></TabsContent>
             <TabsContent value="inventory" className="m-0"><InventoryPanel /></TabsContent>
             <TabsContent value="quests" className="m-0"><QuestsPanel /></TabsContent>
+            <TabsContent value="reputation" className="m-0"><FactionJournalPanel /></TabsContent>
             <TabsContent value="crafting" className="m-0"><CraftingPanel /></TabsContent>
             <TabsContent value="bestiary" className="m-0"><BestiaryPanel /></TabsContent>
             <TabsContent value="settings" className="m-0"><SettingsPanel /></TabsContent>
@@ -943,6 +964,7 @@ export default function GameLayout() {
              {activeTab === 'inventory' && <ScrollArea className="h-full"><InventoryPanel /></ScrollArea>}
              {activeTab === 'crafting' && <ScrollArea className="h-full"><CraftingPanel /></ScrollArea>}
              {activeTab === 'quests' && <ScrollArea className="h-full"><QuestsPanel /></ScrollArea>}
+             {activeTab === 'reputation' && <ScrollArea className="h-full"><FactionJournalPanel /></ScrollArea>}
              {activeTab === 'bestiary' && <ScrollArea className="h-full"><BestiaryPanel /></ScrollArea>}
              {activeTab === 'settings' && <ScrollArea className="h-full"><SettingsPanel /></ScrollArea>}
            </div>
@@ -956,6 +978,7 @@ export default function GameLayout() {
            <NavBtn icon={<Backpack className="w-4 h-4"/>} label={T.nav_inventory[l]} isActive={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
            <NavBtn icon={<Hammer className="w-4 h-4"/>} label={T.nav_crafting[l]} isActive={activeTab === 'crafting'} onClick={() => setActiveTab('crafting')} />
            <NavBtn icon={<MapIcon className="w-4 h-4"/>} label={T.nav_quests[l]} isActive={activeTab === 'quests'} onClick={() => setActiveTab('quests')} />
+           <NavBtn icon={<Scale className="w-4 h-4"/>} label={l === 'ru' ? 'репутация' : 'reputation'} isActive={activeTab === 'reputation'} onClick={() => setActiveTab('reputation')} />
            <NavBtn icon={<BookMarked className="w-4 h-4"/>} label={l === 'ru' ? 'бестиарий' : 'bestiary'} isActive={activeTab === 'bestiary'} onClick={() => setActiveTab('bestiary')} />
            <NavBtn icon={<SettingsIcon className="w-4 h-4"/>} label={T.nav_settings[l]} isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
         </div>
