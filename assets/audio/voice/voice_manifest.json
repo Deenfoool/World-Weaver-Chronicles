@@ -1,25 +1,49 @@
 {
-  "version": 1,
-  "notes": "Record each line as separate .ogg file. Keep filenames equal to line ids.",
+  "version": 2,
+  "notes": "Two-language voice structure. Record each line as separate .ogg file with identical id in ru/en subfolders.",
   "channels": {
     "lore": {
       "enabledByDefault": true,
-      "sourceText": "assets/audio/voice/lore/lore_voice_lines.txt",
-      "outputDir": "assets/audio/voice/lore"
+      "locales": {
+        "ru": {
+          "sourceText": "assets/audio/voice/lore/ru/lore_voice_lines_ru.txt",
+          "outputDir": "assets/audio/voice/lore/ru"
+        },
+        "en": {
+          "sourceText": "assets/audio/voice/lore/en/lore_voice_lines_en.txt",
+          "outputDir": "assets/audio/voice/lore/en"
+        }
+      }
     },
     "quests": {
       "enabledByDefault": true,
-      "sourceText": "assets/audio/voice/quests/quest_voice_lines.txt",
-      "outputDir": "assets/audio/voice/quests"
+      "locales": {
+        "ru": {
+          "sourceText": "assets/audio/voice/quests/ru/quest_voice_lines_ru.txt",
+          "outputDir": "assets/audio/voice/quests/ru"
+        },
+        "en": {
+          "sourceText": "assets/audio/voice/quests/en/quest_voice_lines_en.txt",
+          "outputDir": "assets/audio/voice/quests/en"
+        }
+      }
     },
     "npcDialogue": {
       "enabledByDefault": true,
-      "sourceText": "assets/audio/voice/npc_dialogues/npc_dialogue_lines.txt",
-      "outputDir": "assets/audio/voice/npc_dialogues"
+      "locales": {
+        "ru": {
+          "sourceText": "assets/audio/voice/npc_dialogues/ru/npc_dialogue_lines_ru.txt",
+          "outputDir": "assets/audio/voice/npc_dialogues/ru"
+        },
+        "en": {
+          "sourceText": "assets/audio/voice/npc_dialogues/en/npc_dialogue_lines_en.txt",
+          "outputDir": "assets/audio/voice/npc_dialogues/en"
+        }
+      }
     }
   },
   "naming": {
-    "example": "npc_line_001.ogg",
+    "example": "lore_line_001.ogg",
     "format": "line_id.ogg",
     "sampleRate": 44100,
     "formatAudio": "ogg"

@@ -1,5 +1,5 @@
 import { useGameStore } from '../../game/store';
-import { Location } from '../../game/types';
+import { Location, WorldEconomyEvent } from '../../game/types';
 import { LOCATIONS, MERCHANTS, NPCS, ITEMS } from '../../game/constants';
 import { Map, Tent, Footprints, ShieldAlert, Store, MessageCircle, Shield, FlaskConical, Compass, Hammer, ScrollText, Crown, ChevronUp, ChevronDown, Zap } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -28,8 +28,47 @@ const NPC_META: Record<
   npc_chronicler_vesna: { accent: '#8d7fb8', role: { en: 'Chronicler of Oaths', ru: 'Летописец клятв' }, Icon: ScrollText },
 };
 
+function formatEconomyEvent(
+  event: WorldEconomyEvent,
+  lang: 'en' | 'ru',
+  resolveHubName: (hubId: string) => string,
+): string {
+  const hubName = resolveHubName(event.hubId);
+  const targetName = event.targetHubId ? resolveHubName(event.targetHubId) : null;
+  switch (event.type) {
+    case 'war':
+      return lang === 'ru' ? `Война в ${hubName}: производство просело.` : `War in ${hubName}: production disrupted.`;
+    case 'caravan_attack':
+      return lang === 'ru' ? `Налёты на караваны у ${hubName}: риски маршрутов выросли.` : `Caravan attacks near ${hubName}: route risk increased.`;
+    case 'crisis':
+      return lang === 'ru' ? `Кризис в ${hubName}: рынок ушёл в дефицит.` : `Crisis in ${hubName}: market shifted to scarcity.`;
+    case 'prosperity':
+      return lang === 'ru' ? `${hubName} переживает подъём и расширяет торговлю.` : `${hubName} is in prosperity and expanding trade.`;
+    case 'black_market_opened':
+      return lang === 'ru' ? `В ${hubName} открылось окно чёрного рынка.` : `A black-market window opened in ${hubName}.`;
+    case 'hub_destroyed':
+      return lang === 'ru' ? `Хаб ${hubName} разрушен из-за длительной деградации.` : `Hub ${hubName} collapsed after sustained degradation.`;
+    case 'hub_founded':
+      return lang === 'ru' ? `Основан новый хаб: ${hubName}.` : `A new hub has been founded: ${hubName}.`;
+    case 'player_raid':
+      return lang === 'ru'
+        ? `Вы провели рейд на караваны ${hubName}${targetName ? ` (из ${targetName})` : ''}.`
+        : `You raided caravans of ${hubName}${targetName ? ` (from ${targetName})` : ''}.`;
+    case 'player_investment':
+      return lang === 'ru' ? `Вы инвестировали в ${hubName} и укрепили экономику.` : `You invested in ${hubName} and strengthened its economy.`;
+    case 'player_diplomacy':
+      return lang === 'ru'
+        ? `Вы провели дипломатию с ${hubName}${targetName ? ` и ${targetName}` : ''}.`
+        : `You ran diplomacy with ${hubName}${targetName ? ` and ${targetName}` : ''}.`;
+    case 'player_sabotage':
+      return lang === 'ru' ? `Вы устроили саботаж в ${hubName}.` : `You sabotaged production in ${hubName}.`;
+    default:
+      return lang === 'ru' ? `Событие в ${hubName}.` : `Event in ${hubName}.`;
+  }
+}
+
 export default function LocationScreen({ location, status }: Props) {
-  const { travelTo, explore, rest, settings } = useGameStore();
+  const { travelTo, explore, rest, settings, worldEconomy, player, raidCaravan, investInHub, runDiplomacy, sabotageHub } = useGameStore();
   const [showMerchant, setShowMerchant] = useState(false);
   const [activeNpcId, setActiveNpcId] = useState<string | null>(null);
   const [menuTab, setMenuTab] = useState<'actions' | 'travel'>('actions');
@@ -47,10 +86,21 @@ export default function LocationScreen({ location, status }: Props) {
   const [travelPage, setTravelPage] = useState(0);
   const [npcPages, setNpcPages] = useState(1);
   const [travelPages, setTravelPages] = useState(1);
+  const [selectedHubTarget, setSelectedHubTarget] = useState<string>(location.id);
+  const [investGoldInput, setInvestGoldInput] = useState('50');
+  const [hubActionMessage, setHubActionMessage] = useState<string>('');
 
   const l = settings.language;
   const localMerchant = Object.values(MERCHANTS).find(m => m.locationId === location.id);
   const localNpcs = location.npcs?.map(id => NPCS[id]) || [];
+  const hubEconomy = worldEconomy.hubs[location.id];
+  const hubRoutes = hubEconomy
+    ? Object.values(worldEconomy.tradeRoutes || {}).filter((route) => route.fromHubId === location.id || route.toHubId === location.id)
+    : [];
+  const availableHubTargets = useMemo(
+    () => Object.values(worldEconomy.hubs || {}).filter((hub) => !hub.destroyed),
+    [worldEconomy.hubs],
+  );
   const isMobile = viewportWidth < 768;
   const isNarrowMobile = viewportWidth >= 360 && viewportWidth <= 430;
 
@@ -102,6 +152,22 @@ export default function LocationScreen({ location, status }: Props) {
     const id = setTimeout(calcPages, 80);
     return () => clearTimeout(id);
   }, [menuTab, localNpcs.length, location.connectedLocations.length, viewportWidth, compactMode]);
+
+  useEffect(() => {
+    const exists = availableHubTargets.some((hub) => hub.hubId === selectedHubTarget);
+    if (!exists) {
+      setSelectedHubTarget(location.id);
+    }
+  }, [availableHubTargets, selectedHubTarget, location.id]);
+
+  const selectedHubInfo = worldEconomy.hubs[selectedHubTarget];
+  const recentEconomyEvents = useMemo(() => {
+    const all = worldEconomy.events || [];
+    return all
+      .filter((event) => event.hubId === location.id || event.targetHubId === location.id)
+      .slice(-5)
+      .reverse();
+  }, [worldEconomy.events, location.id]);
 
   const onNpcScroll = () => {
     const el = npcCarouselRef.current;
@@ -170,6 +236,27 @@ export default function LocationScreen({ location, status }: Props) {
             {location.possibleLoot
               .map((id) => (id === 'gold' ? (l === 'ru' ? 'Золото' : 'Gold') : ITEMS[id]?.name[l] || id))
               .join(', ')}
+          </div>
+        )}
+        {hubEconomy && (
+          <div className="mt-2 text-[10px] md:text-xs text-primary/90 bg-black/45 border border-primary/25 rounded px-3 py-2 inline-flex gap-3 items-center">
+            <span>
+              {l === 'ru'
+                ? `Тип: ${hubEconomy.hubKind === 'faction' ? 'фракция' : hubEconomy.hubKind === 'alliance' ? 'содружество' : 'сообщество'}`
+                : `Type: ${hubEconomy.hubKind}`}
+            </span>
+            <span>{l === 'ru' ? `Хаб ур. ${hubEconomy.level}` : `Hub Lv ${hubEconomy.level}`}</span>
+            <span>{l === 'ru' ? `Богатство: ${hubEconomy.wealth}` : `Wealth: ${hubEconomy.wealth}`}</span>
+            <span>{l === 'ru' ? `Рынок: ${hubEconomy.supply}/${hubEconomy.demand}` : `Market: ${hubEconomy.supply}/${hubEconomy.demand}`}</span>
+            <span>
+              {l === 'ru'
+                ? `Режим: ${hubEconomy.marketMode === 'black_market' ? 'чёрный рынок' : hubEconomy.marketMode === 'scarcity' ? 'дефицит' : hubEconomy.marketMode === 'surplus' ? 'профицит' : 'стабильно'}`
+                : `Mode: ${hubEconomy.marketMode === 'black_market' ? 'black market' : hubEconomy.marketMode}`}
+            </span>
+            <span>{l === 'ru' ? `Маршруты: ${hubRoutes.length}` : `Routes: ${hubRoutes.length}`}</span>
+            {hubEconomy.destroyed && (
+              <span className="text-destructive">{l === 'ru' ? 'Статус: разрушен' : 'Status: destroyed'}</span>
+            )}
           </div>
         )}
       </div>
@@ -318,6 +405,132 @@ export default function LocationScreen({ location, status }: Props) {
                         </button>
                       )}
                     </div>
+
+                    {hubEconomy && (
+                      <div className="rounded-xl border border-primary/25 bg-black/35 p-3 space-y-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-primary/80">
+                          {l === 'ru' ? 'Управление хабом' : 'Hub Control'}
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <select
+                            value={selectedHubTarget}
+                            onChange={(e) => setSelectedHubTarget(e.target.value)}
+                            className="sm:col-span-2 bg-black/45 border border-white/15 rounded px-2 py-2 text-xs text-white"
+                          >
+                            {availableHubTargets.map((hub) => (
+                              <option key={hub.hubId} value={hub.hubId}>
+                                {(LOCATIONS[hub.hubId]?.name?.[l] || hub.hubId)} · Lv {hub.level}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            value={investGoldInput}
+                            onChange={(e) => setInvestGoldInput(e.target.value.replace(/[^\d]/g, '').slice(0, 5))}
+                            placeholder={l === 'ru' ? 'Золото' : 'Gold'}
+                            className="bg-black/45 border border-white/15 rounded px-2 py-2 text-xs text-white"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <button
+                            onClick={() => {
+                              const amount = Math.max(0, Number.parseInt(investGoldInput || '0', 10) || 0);
+                              if (amount <= 0) {
+                                setHubActionMessage(l === 'ru' ? 'Укажите сумму инвестиций.' : 'Set investment amount first.');
+                                return;
+                              }
+                              if (amount > player.gold) {
+                                setHubActionMessage(l === 'ru' ? 'Недостаточно золота для инвестиции.' : 'Not enough gold for this investment.');
+                                return;
+                              }
+                              investInHub(selectedHubTarget, amount);
+                              setHubActionMessage(
+                                l === 'ru'
+                                  ? `Инвестиция ${amount} золота направлена в ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`
+                                  : `Invested ${amount} gold into ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`,
+                              );
+                            }}
+                            className="rounded border border-emerald-500/35 bg-emerald-500/10 text-emerald-300 text-[11px] py-2 hover:bg-emerald-500/20 transition-colors"
+                          >
+                            {l === 'ru' ? 'Инвест.' : 'Invest'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              runDiplomacy(selectedHubTarget);
+                              setHubActionMessage(
+                                l === 'ru'
+                                  ? `Дипломатическая миссия отправлена в ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`
+                                  : `Diplomatic mission sent to ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`,
+                              );
+                            }}
+                            className="rounded border border-sky-500/35 bg-sky-500/10 text-sky-300 text-[11px] py-2 hover:bg-sky-500/20 transition-colors"
+                          >
+                            {l === 'ru' ? 'Диплом.' : 'Diplomacy'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              raidCaravan(selectedHubTarget);
+                              setHubActionMessage(
+                                l === 'ru'
+                                  ? `Караванный рейд проведён против ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`
+                                  : `Caravan raid executed against ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`,
+                              );
+                            }}
+                            className="rounded border border-amber-500/35 bg-amber-500/10 text-amber-300 text-[11px] py-2 hover:bg-amber-500/20 transition-colors"
+                          >
+                            {l === 'ru' ? 'Рейд' : 'Raid'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              sabotageHub(selectedHubTarget);
+                              setHubActionMessage(
+                                l === 'ru'
+                                  ? `Саботаж произведён в ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`
+                                  : `Sabotage carried out in ${LOCATIONS[selectedHubTarget]?.name?.[l] || selectedHubTarget}.`,
+                              );
+                            }}
+                            className="rounded border border-destructive/35 bg-destructive/10 text-destructive text-[11px] py-2 hover:bg-destructive/20 transition-colors"
+                          >
+                            {l === 'ru' ? 'Саботаж' : 'Sabotage'}
+                          </button>
+                        </div>
+                        {selectedHubInfo && (
+                          <p className="text-[11px] text-muted-foreground">
+                            {l === 'ru'
+                              ? `Цель: ур. ${selectedHubInfo.level}, богатство ${selectedHubInfo.wealth}, отношение ${selectedHubInfo.playerRelation}, режим ${selectedHubInfo.marketMode}`
+                              : `Target: lv ${selectedHubInfo.level}, wealth ${selectedHubInfo.wealth}, relation ${selectedHubInfo.playerRelation}, mode ${selectedHubInfo.marketMode}`}
+                          </p>
+                        )}
+                        {hubActionMessage && (
+                          <p className="text-[11px] text-primary/90">{hubActionMessage}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {hubEconomy && (
+                      <div className="rounded-xl border border-white/10 bg-black/30 p-3 space-y-2">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-white/70">
+                          {l === 'ru' ? 'Экономические события' : 'Economic Events'}
+                        </p>
+                        {recentEconomyEvents.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground">
+                            {l === 'ru' ? 'Пока тишина. Мир готовит следующий ход.' : 'Quiet for now. The world is preparing its next move.'}
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {recentEconomyEvents.map((event) => (
+                              <div key={event.id} className="text-[11px] text-muted-foreground border border-white/5 rounded px-2 py-1.5 bg-black/25">
+                                <span className="text-primary/90 mr-2">[{event.tick}]</span>
+                                {formatEconomyEvent(
+                                  event,
+                                  l,
+                                  (hubId) => LOCATIONS[hubId]?.name?.[l] || hubId,
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <div ref={npcCarouselRef} onScroll={onNpcScroll} className="overflow-x-auto pb-1 custom-scrollbar snap-x snap-mandatory">
                       <div className="flex gap-2.5 min-w-max">

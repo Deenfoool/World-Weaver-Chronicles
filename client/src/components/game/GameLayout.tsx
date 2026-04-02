@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../../game/store';
 import { LOCATIONS, WEATHER, ITEMS, CLASSES, SKILLS } from '../../game/constants';
 import { Progress } from "@/components/ui/progress";
@@ -15,6 +15,146 @@ import BestiaryPanel from './BestiaryPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { T } from '../../game/translations';
 import { CharacterCreationBonuses } from '../../game/store';
+import { WorldEconomyEvent } from '../../game/types';
+
+type PreloadTask = {
+  id: string;
+  label: string;
+  run: () => Promise<void>;
+};
+
+type EconomyNotice = {
+  id: string;
+  title: string;
+  body: string;
+  tone: 'good' | 'bad' | 'neutral';
+  createdAt: number;
+};
+
+function buildEconomyNotice(
+  event: WorldEconomyEvent,
+  lang: 'en' | 'ru',
+  resolveHubName: (hubId: string) => string,
+): Omit<EconomyNotice, 'id' | 'createdAt'> | null {
+  const hubName = resolveHubName(event.hubId);
+  switch (event.type) {
+    case 'hub_founded':
+      return {
+        title: lang === 'ru' ? 'Новый хаб основан' : 'New Hub Founded',
+        body: lang === 'ru' ? `${hubName} появился на карте.` : `${hubName} has appeared on the map.`,
+        tone: 'good',
+      };
+    case 'hub_destroyed':
+      return {
+        title: lang === 'ru' ? 'Хаб уничтожен' : 'Hub Destroyed',
+        body: lang === 'ru' ? `${hubName} пал из-за деградации экономики.` : `${hubName} collapsed under economic degradation.`,
+        tone: 'bad',
+      };
+    case 'war':
+      return {
+        title: lang === 'ru' ? 'Война в регионе' : 'War in the Region',
+        body: lang === 'ru' ? `${hubName}: сбои производства и рост рисков.` : `${hubName}: production disruptions and rising risk.`,
+        tone: 'bad',
+      };
+    case 'crisis':
+      return {
+        title: lang === 'ru' ? 'Экономический кризис' : 'Economic Crisis',
+        body: lang === 'ru' ? `${hubName} уходит в дефицит.` : `${hubName} is sliding into scarcity.`,
+        tone: 'bad',
+      };
+    case 'caravan_attack':
+      return {
+        title: lang === 'ru' ? 'Караваны под ударом' : 'Caravans Under Attack',
+        body: lang === 'ru' ? `Маршруты у ${hubName} стали опаснее.` : `Trade routes near ${hubName} became more dangerous.`,
+        tone: 'bad',
+      };
+    case 'black_market_opened':
+      return {
+        title: lang === 'ru' ? 'Окно чёрного рынка' : 'Black Market Window',
+        body: lang === 'ru' ? `${hubName}: теневая торговля активна.` : `${hubName}: shadow trade is now active.`,
+        tone: 'neutral',
+      };
+    case 'prosperity':
+      return {
+        title: lang === 'ru' ? 'Экономический подъём' : 'Economic Prosperity',
+        body: lang === 'ru' ? `${hubName} на волне роста и стабильности.` : `${hubName} is surging with growth and stability.`,
+        tone: 'good',
+      };
+    default:
+      return null;
+  }
+}
+
+function preloadImage(src: string): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = src;
+  });
+}
+
+function preloadAudio(src: string): Promise<void> {
+  return new Promise((resolve) => {
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audio.oncanplaythrough = () => resolve();
+    audio.onerror = () => resolve();
+    audio.src = src;
+    audio.load();
+    setTimeout(resolve, 1500);
+  });
+}
+
+function buildPreloadTasks(): PreloadTask[] {
+  const tasks: PreloadTask[] = [];
+  const locationImages = Array.from(new Set(Object.values(LOCATIONS).map((l) => l.image).filter(Boolean)));
+  locationImages.forEach((src, idx) => {
+    tasks.push({ id: `loc-img-${idx}`, label: `Image ${src}`, run: () => preloadImage(src) });
+  });
+
+  Object.values(LOCATIONS).forEach((loc) => {
+    (loc.npcs || []).forEach((npcId) => {
+      tasks.push({ id: `npc-full-${npcId}`, label: `NPC ${npcId}`, run: () => preloadImage(`/images/npcs/${npcId}.png`) });
+      tasks.push({ id: `npc-mini-${npcId}`, label: `NPC mini ${npcId}`, run: () => preloadImage(`/images/npcs/mini/${npcId}_mini.png`) });
+    });
+  });
+
+  tasks.push({
+    id: 'data-core',
+    label: 'Core game data',
+    run: async () => {
+      void Object.keys(LOCATIONS).length;
+      void Object.keys(CLASSES).length;
+      void Object.keys(SKILLS).length;
+      await Promise.resolve();
+    },
+  });
+
+  tasks.push({
+    id: 'audio-manifest',
+    label: 'Audio manifest',
+    run: async () => {
+      const resp = await fetch('/assets/audio/audio_manifest.json').catch(() => null);
+      if (!resp || !resp.ok) return;
+      const manifest = await resp.json().catch(() => null);
+      if (!manifest || typeof manifest !== 'object') return;
+      const paths = Object.values(manifest as Record<string, any>)
+        .flatMap((entry: any) =>
+          Array.isArray(entry)
+            ? entry.map((sub: any) => (typeof sub?.path === 'string' ? sub.path : null))
+            : typeof entry?.path === 'string'
+              ? [entry.path]
+              : [],
+        )
+        .filter(Boolean)
+        .slice(0, 16) as string[];
+      await Promise.all(paths.map((p) => preloadAudio(String(p).startsWith('/') ? String(p) : `/${String(p)}`)));
+    },
+  });
+
+  return tasks;
+}
 
 type CreationOption = {
   id: string;
@@ -32,16 +172,118 @@ type CreationQuestion = {
 };
 
 export default function GameLayout() {
-  const { player, loadSave, chooseClass, currentLocationId, currentWeather, status, settings } = useGameStore();
+  const { player, loadSave, chooseClass, advanceTutorialStep, skipTutorial, markTutorialHintSeen, currentLocationId, currentWeather, status, settings, worldEconomy } = useGameStore();
   const [activeTab, setActiveTab] = useState('world'); 
+  const [desktopTab, setDesktopTab] = useState('character');
   const [introStep, setIntroStep] = useState(0);
+  const [creationUnlocked, setCreationUnlocked] = useState(false);
   const [creationStep, setCreationStep] = useState(0);
   const [creationAnswers, setCreationAnswers] = useState<Record<string, string>>({});
+  const [heroName, setHeroName] = useState('');
+  const [heroNameTouched, setHeroNameTouched] = useState(false);
+  const [preloadProgress, setPreloadProgress] = useState(0);
+  const [preloadDone, setPreloadDone] = useState(false);
+  const [preloadStarted, setPreloadStarted] = useState(false);
+  const [preloadTipIndex, setPreloadTipIndex] = useState(0);
+  const [economyNotices, setEconomyNotices] = useState<EconomyNotice[]>([]);
   const l = settings.language;
+  const preloadStartedRef = useRef(false);
+  const economyEventsBootstrappedRef = useRef(false);
+  const seenEconomyEventIdsRef = useRef<Set<string>>(new Set());
+
+  const normalizeHeroName = (value: string) => value.trim().replace(/\s+/g, ' ');
+  const isHeroNameValid = (value: string) => {
+    const n = normalizeHeroName(value);
+    if (n.length < 2 || n.length > 24) return false;
+    return /^[A-Za-zА-Яа-яЁё0-9 '\-]+$/.test(n);
+  };
 
   useEffect(() => {
     loadSave();
   }, []);
+
+  useEffect(() => {
+    if (player.classId) return;
+    if (preloadStartedRef.current) return;
+    preloadStartedRef.current = true;
+    setPreloadStarted(true);
+    const tasks = buildPreloadTasks();
+    if (tasks.length === 0) {
+      setPreloadProgress(100);
+      setPreloadDone(true);
+      return;
+    }
+
+    let completed = 0;
+    const run = async () => {
+      for (const task of tasks) {
+        await task.run().catch(() => undefined);
+        completed += 1;
+        setPreloadProgress(Math.round((completed / tasks.length) * 100));
+      }
+      setPreloadDone(true);
+    };
+
+    run();
+  }, [player.classId]);
+
+  useEffect(() => {
+    if (player.classId) return;
+    if (preloadDone) return;
+    const id = window.setInterval(() => {
+      setPreloadTipIndex((prev) => (prev + 1) % 5);
+    }, 3200);
+    return () => window.clearInterval(id);
+  }, [player.classId, preloadDone]);
+
+  useEffect(() => {
+    if (player.classId) return;
+    if (heroNameTouched) return;
+    if (heroName.length > 0) return;
+    const fallback = player.name && player.name !== 'Traveler'
+      ? player.name
+      : l === 'ru'
+        ? 'Странник'
+        : 'Traveler';
+    setHeroName(fallback);
+  }, [player.classId, player.name, heroNameTouched, heroName.length, l]);
+
+  useEffect(() => {
+    const events = worldEconomy?.events || [];
+    if (!economyEventsBootstrappedRef.current) {
+      events.forEach((event) => seenEconomyEventIdsRef.current.add(event.id));
+      economyEventsBootstrappedRef.current = true;
+      return;
+    }
+    const freshEvents = events.filter((event) => !seenEconomyEventIdsRef.current.has(event.id));
+    if (freshEvents.length === 0) return;
+    freshEvents.forEach((event) => seenEconomyEventIdsRef.current.add(event.id));
+    const newNotices = freshEvents
+      .map((event) => {
+        const base = buildEconomyNotice(event, l, (hubId) => LOCATIONS[hubId]?.name?.[l] || hubId);
+        if (!base) return null;
+        return {
+          id: event.id,
+          title: base.title,
+          body: base.body,
+          tone: base.tone,
+          createdAt: Date.now(),
+        } satisfies EconomyNotice;
+      })
+      .filter((notice): notice is EconomyNotice => Boolean(notice));
+    if (newNotices.length === 0) return;
+    setEconomyNotices((prev) => [...prev, ...newNotices].slice(-4));
+  }, [worldEconomy.events, l]);
+
+  useEffect(() => {
+    if (economyNotices.length === 0) return;
+    const ttlMs = 9000;
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      setEconomyNotices((prev) => prev.filter((notice) => now - notice.createdAt < ttlMs));
+    }, 800);
+    return () => window.clearInterval(id);
+  }, [economyNotices.length]);
 
   const location = LOCATIONS[currentLocationId];
   
@@ -57,6 +299,66 @@ export default function GameLayout() {
       {status === 'combat' ? <CombatScreen /> : <LocationScreen location={location} status={status} />}
     </div>
   );
+
+  const tutorialSteps = [
+    {
+      id: 'tutorial_welcome',
+      title: l === 'ru' ? 'Добро пожаловать в хроники' : 'Welcome to the chronicles',
+      body:
+        l === 'ru'
+          ? 'Это короткое обучение проведет вас по ключевым экранам: мир, бой, инвентарь и квесты.'
+          : 'This short tutorial guides you through key screens: world, combat, inventory, and quests.',
+      ready: true,
+    },
+    {
+      id: 'tutorial_world',
+      title: l === 'ru' ? 'Мир и перемещения' : 'World and travel',
+      body:
+        l === 'ru'
+          ? 'Начните с вкладки мира: исследуйте локацию, общайтесь с NPC и перемещайтесь по карте.'
+          : 'Start in the world tab: explore the location, talk to NPCs, and travel across the map.',
+      ready: status !== 'combat',
+    },
+    {
+      id: 'tutorial_combat',
+      title: l === 'ru' ? 'Основы боя' : 'Combat basics',
+      body:
+        l === 'ru'
+          ? 'В бою следите за энергией, статусами, кулдаунами и контратаками. Попробуйте активный навык.'
+          : 'In combat, track energy, status effects, cooldowns, and counterattacks. Try an active skill.',
+      ready: status === 'combat',
+    },
+    {
+      id: 'tutorial_inventory',
+      title: l === 'ru' ? 'Инвентарь и перегруз' : 'Inventory and overload',
+      body:
+        l === 'ru'
+          ? 'Откройте инвентарь: используйте фильтры/сортировку и проверяйте слоты зелий/материалов.'
+          : 'Open inventory: use filters/sorting and monitor potion/material slot usage.',
+      ready: activeTab === 'inventory' || desktopTab === 'inventory',
+    },
+    {
+      id: 'tutorial_quests',
+      title: l === 'ru' ? 'Квестовый журнал' : 'Quest log',
+      body:
+        l === 'ru'
+          ? 'Откройте квесты, чтобы отслеживать прогресс, цели и награды цепочек.'
+          : 'Open quests to track progress, objectives, and chain rewards.',
+      ready: activeTab === 'quests' || desktopTab === 'quests',
+    },
+  ] as const;
+
+  const tutorial = settings.tutorial;
+  const tutorialStepIndex = Math.max(0, Math.min(4, tutorial.step || 0));
+  const tutorialStep = tutorialSteps[tutorialStepIndex];
+  const showTutorialOverlay = !!player.classId && tutorial.enabled && !tutorial.completed && tutorialStepIndex <= 4;
+
+  useEffect(() => {
+    if (!showTutorialOverlay || !tutorialStep) return;
+    if (!tutorialStep.ready) return;
+    if ((tutorial.seenHints || []).includes(tutorialStep.id)) return;
+    markTutorialHintSeen(tutorialStep.id);
+  }, [showTutorialOverlay, tutorialStep, tutorial.seenHints, markTutorialHintSeen]);
 
   const introLore = [
     {
@@ -278,7 +580,24 @@ export default function GameLayout() {
 
   if (!player.classId) {
     const loreFinished = introStep >= introLore.length;
+    const canEnterCreation = preloadDone;
     const currentQuestion = creationQuestions[creationStep];
+    const loadingTips =
+      l === 'ru'
+        ? [
+            'Совет: кровотечение и яд суммируются по разным источникам.',
+            'Совет: репутация у торговца снижает цены покупки.',
+            'Совет: перегруз снижает урон, шанс побега и восстановление энергии.',
+            'Совет: фазовые боссы меняют поведение по мере потери HP.',
+            'Совет: активные навыки и ульты имеют кулдауны, планируйте ротацию.',
+          ]
+        : [
+            'Tip: bleeding and poison stack from different sources.',
+            'Tip: merchant reputation lowers your buy prices.',
+            'Tip: overload lowers damage, flee chance, and energy recovery.',
+            'Tip: phase bosses change behavior as their HP drops.',
+            'Tip: active skills and ultimates have cooldowns, plan your rotation.',
+          ];
     const selectedOptions = creationQuestions
       .map((q) => q.options.find((opt) => opt.id === creationAnswers[q.id]))
       .filter(Boolean) as CreationOption[];
@@ -297,6 +616,13 @@ export default function GameLayout() {
       {},
     );
     const classPreview = CLASSES[selectedPath];
+    const heroNameError =
+      heroNameTouched && !isHeroNameValid(heroName)
+        ? l === 'ru'
+          ? 'Введите имя 2-24 символа (буквы, цифры, пробел, апостроф, дефис).'
+          : 'Enter a name 2-24 chars (letters, digits, space, apostrophe, hyphen).'
+        : '';
+    const canCreateCharacter = isHeroNameValid(heroName);
 
     const chooseAnswer = (questionId: string, optionId: string) => {
       setCreationAnswers((prev) => ({ ...prev, [questionId]: optionId }));
@@ -332,6 +658,37 @@ export default function GameLayout() {
                     {T.intro_skip[l]}
                   </button>
                 </div>
+              </div>
+            ) : !creationUnlocked ? (
+              <div className="max-w-3xl mx-auto text-center">
+                <p className="text-center text-xs uppercase tracking-[0.2em] text-primary/80 mb-3">
+                  {l === 'ru' ? 'Подготовка мира' : 'Preparing The World'}
+                </p>
+                <h1 className="text-3xl md:text-5xl font-serif text-primary mb-3 uppercase tracking-widest">
+                  {l === 'ru' ? 'Загрузка хроник' : 'Loading Chronicles'}
+                </h1>
+                <p className="text-sm md:text-base text-muted-foreground mb-6 leading-relaxed">
+                  {l === 'ru'
+                    ? 'Мы подгружаем изображения, игровые данные и аудио-ресурсы, чтобы старт был плавным.'
+                    : 'We are preloading images, gameplay data, and audio resources for a smooth start.'}
+                </p>
+                <div className="rounded-lg border border-primary/25 bg-black/35 p-4 mb-4">
+                  <div className="flex justify-between text-xs text-primary/85 mb-2">
+                    <span>{preloadStarted ? (l === 'ru' ? 'Прогресс' : 'Progress') : l === 'ru' ? 'Ожидание' : 'Pending'}</span>
+                    <span>{preloadProgress}%</span>
+                  </div>
+                  <Progress value={preloadProgress} className="h-2 bg-black/60" />
+                </div>
+                <div className="min-h-[60px] rounded border border-white/10 bg-black/30 p-3 mb-6">
+                  <p className="text-xs text-muted-foreground">{loadingTips[preloadTipIndex]}</p>
+                </div>
+                {!canEnterCreation ? (
+                  <p className="text-xs text-primary/80 animate-pulse">{l === 'ru' ? 'Идет подготовка ресурсов...' : 'Preparing resources...'}</p>
+                ) : (
+                  <button onClick={() => setCreationUnlocked(true)} className="rpg-button px-6 py-3">
+                    {l === 'ru' ? 'Нажмите, чтобы продолжить' : 'Press To Continue'}
+                  </button>
+                )}
               </div>
             ) : creationStep < creationQuestions.length ? (
               <div className="max-w-4xl mx-auto">
@@ -401,6 +758,27 @@ export default function GameLayout() {
                     <p>{l === 'ru' ? 'Стартовое золото' : 'Starting gold'}: {25 + (accumulatedBonuses.gold || 0)}</p>
                   </div>
                 </div>
+                <div className="rounded border border-white/15 bg-black/35 p-4 mb-4">
+                  <label className="block text-xs uppercase tracking-widest text-primary/80 mb-2">
+                    {l === 'ru' ? 'Имя героя' : 'Hero Name'}
+                  </label>
+                  <input
+                    value={heroName}
+                    onChange={(e) => {
+                      setHeroNameTouched(true);
+                      setHeroName(e.target.value);
+                    }}
+                    maxLength={32}
+                    placeholder={l === 'ru' ? 'Введите имя' : 'Enter a name'}
+                    className="w-full bg-black/60 border border-primary/30 rounded px-3 py-2 text-sm text-white outline-none focus:border-primary"
+                  />
+                  <p className={`text-[11px] mt-2 ${heroNameError ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {heroNameError ||
+                      (l === 'ru'
+                        ? `Будет сохранено как: ${normalizeHeroName(heroName).slice(0, 24) || '—'}`
+                        : `Will be saved as: ${normalizeHeroName(heroName).slice(0, 24) || '—'}`)}
+                  </p>
+                </div>
                 <div className="flex gap-3 justify-center">
                   <button
                     onClick={() => setCreationStep(creationQuestions.length - 1)}
@@ -409,8 +787,9 @@ export default function GameLayout() {
                     {l === 'ru' ? 'Изменить выбор' : 'Adjust choices'}
                   </button>
                   <button
-                    onClick={() => chooseClass(selectedPath, accumulatedBonuses)}
-                    className="rpg-button px-6 py-3"
+                    onClick={() => chooseClass(selectedPath, accumulatedBonuses, normalizeHeroName(heroName))}
+                    disabled={!canCreateCharacter}
+                    className={`rpg-button px-6 py-3 ${!canCreateCharacter ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {l === 'ru' ? 'Создать персонажа' : 'Create Character'}
                   </button>
@@ -438,7 +817,7 @@ export default function GameLayout() {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="character" className="flex-1 flex flex-col min-h-0 mt-2">
+        <Tabs value={desktopTab} onValueChange={setDesktopTab} className="flex-1 flex flex-col min-h-0 mt-2">
           <div className="px-4 shrink-0">
             <TabsList className="grid w-full grid-cols-7 bg-black/50 border border-white/5 h-12">
               <TabsTrigger value="character" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><User className="w-4 h-4"/></TabsTrigger>
@@ -521,6 +900,37 @@ export default function GameLayout() {
              </div>
            </div>
 
+           {economyNotices.length > 0 && (
+             <div className="absolute top-16 right-3 md:right-4 z-[70] w-[min(92vw,360px)] space-y-2 pointer-events-none">
+               {economyNotices.map((notice) => (
+                 <div
+                   key={notice.id}
+                   className={`rounded-lg border backdrop-blur-xl px-3 py-2 shadow-xl ${
+                     notice.tone === 'good'
+                       ? 'border-emerald-500/30 bg-emerald-950/45'
+                       : notice.tone === 'bad'
+                         ? 'border-destructive/35 bg-black/80'
+                         : 'border-primary/30 bg-black/75'
+                   }`}
+                 >
+                   <p
+                     className={`text-[10px] uppercase tracking-[0.16em] mb-1 ${
+                       notice.tone === 'good'
+                         ? 'text-emerald-300'
+                         : notice.tone === 'bad'
+                           ? 'text-destructive'
+                           : 'text-primary/90'
+                     }`}
+                   >
+                     {l === 'ru' ? 'Экономическое уведомление' : 'Economy Notification'}
+                   </p>
+                   <p className="text-xs text-white font-semibold">{notice.title}</p>
+                   <p className="text-[11px] text-muted-foreground leading-snug">{notice.body}</p>
+                 </div>
+               ))}
+             </div>
+           )}
+
            {/* Desktop always shows world. Mobile shows based on activeTab. */}
            <div className="hidden md:flex flex-1 h-full overflow-hidden p-8">
              {renderWorld()}
@@ -549,6 +959,55 @@ export default function GameLayout() {
            <NavBtn icon={<BookMarked className="w-4 h-4"/>} label={l === 'ru' ? 'бестиарий' : 'bestiary'} isActive={activeTab === 'bestiary'} onClick={() => setActiveTab('bestiary')} />
            <NavBtn icon={<SettingsIcon className="w-4 h-4"/>} label={T.nav_settings[l]} isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
         </div>
+
+        {showTutorialOverlay && tutorialStep && (
+          <div className="absolute inset-0 z-[120] pointer-events-none">
+            <div className="absolute inset-0 bg-black/35" />
+            <div className="absolute bottom-4 left-4 right-4 md:left-auto md:right-6 md:bottom-6 md:w-[420px] pointer-events-auto">
+              <div className="rounded-xl border border-primary/30 bg-black/85 backdrop-blur-xl p-4 shadow-2xl">
+                <p className="text-[10px] uppercase tracking-[0.22em] text-primary/80 mb-2">
+                  {l === 'ru' ? `Обучение ${tutorialStepIndex + 1}/5` : `Tutorial ${tutorialStepIndex + 1}/5`}
+                </p>
+                <h3 className="font-serif text-xl text-white mb-2">{tutorialStep.title}</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed mb-4">{tutorialStep.body}</p>
+                {!tutorialStep.ready && (
+                  <p className="text-[11px] text-primary/80 mb-3">
+                    {l === 'ru'
+                      ? 'Чтобы продолжить этот шаг, откройте нужный экран.'
+                      : 'Open the relevant screen to continue this step.'}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => advanceTutorialStep()}
+                    disabled={!tutorialStep.ready}
+                    className={`rpg-button px-4 py-2 text-xs ${!tutorialStep.ready ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {tutorialStepIndex === 4
+                      ? l === 'ru'
+                        ? 'Завершить'
+                        : 'Finish'
+                      : l === 'ru'
+                        ? 'Далее'
+                        : 'Next'}
+                  </button>
+                  <button
+                    onClick={() => advanceTutorialStep()}
+                    className="rpg-button px-4 py-2 text-xs border-white/20 text-white hover:bg-white/10"
+                  >
+                    {l === 'ru' ? 'Пропустить шаг' : 'Skip step'}
+                  </button>
+                  <button
+                    onClick={() => skipTutorial()}
+                    className="rpg-button px-4 py-2 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
+                  >
+                    {l === 'ru' ? 'Пропустить обучение' : 'Skip tutorial'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

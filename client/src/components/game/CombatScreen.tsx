@@ -1,10 +1,10 @@
 import { LogOut } from 'lucide-react';
 import { useGameStore } from '../../game/store';
 import { Progress } from '@/components/ui/progress';
-import { Sword, Shield, Activity, Skull, Zap, Backpack } from 'lucide-react';
+import { Sword, Shield, Activity, Skull, Zap, Backpack, AlertTriangle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { T } from '../../game/translations';
-import { ITEMS, SKILLS } from '../../game/constants';
+import { ENEMIES, ITEMS, SKILLS } from '../../game/constants';
 
 export default function CombatScreen() {
   const {
@@ -22,6 +22,8 @@ export default function CombatScreen() {
     isPlayerBlocking,
     combatCombo,
     combatAdrenaline,
+    quests,
+    currentLocationId,
   } = useGameStore();
 
   const [showPouch, setShowPouch] = useState(false);
@@ -51,6 +53,19 @@ export default function CombatScreen() {
         }),
     [player.learnedSkills],
   );
+  const activeChainQuest = useMemo(
+    () =>
+      quests.find((q) =>
+        !q.isCompleted
+        && (q.offerState || 'active') === 'active'
+        && q.isEventQuest
+        && (q.eventQuest?.originType === 'war' || q.eventQuest?.originType === 'caravan_attack')
+        && q.locationId === currentLocationId
+        && q.goals.some((g) => g.type === 'kill' && g.currentCount < g.targetCount),
+      ),
+    [quests, currentLocationId],
+  );
+  const chainKillGoal = activeChainQuest?.goals.find((g) => g.type === 'kill' && g.currentCount < g.targetCount);
 
   if (!currentEnemy) return null;
 
@@ -160,6 +175,24 @@ export default function CombatScreen() {
       </div>
 
       <div className="rpg-panel bg-black/80 backdrop-blur-md flex-1 flex flex-col overflow-hidden border-border/40 min-h-[100px]">
+        {activeChainQuest && chainKillGoal && (
+          <div className="mx-2 mt-2 rounded border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[11px]">
+            <p className="text-amber-200 font-semibold flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {l === 'ru' ? 'Активна боевая цепочка' : 'Active Combat Chain'}
+            </p>
+            <p className="text-amber-100/90">
+              {l === 'ru'
+                ? `Этап ${chainKillGoal.currentCount + 1}/${chainKillGoal.targetCount}: ${ENEMIES[chainKillGoal.targetId]?.name.ru || chainKillGoal.targetId}.`
+                : `Stage ${chainKillGoal.currentCount + 1}/${chainKillGoal.targetCount}: ${ENEMIES[chainKillGoal.targetId]?.name.en || chainKillGoal.targetId}.`}
+            </p>
+            <p className="text-amber-100/80">
+              {l === 'ru'
+                ? 'Побег или поражение сорвёт цепочку и даст штраф к отношениям/золоту.'
+                : 'Fleeing or defeat breaks the chain and applies relation/gold penalties.'}
+            </p>
+          </div>
+        )}
         <div className="bg-white/5 border-b border-white/10 px-3 py-1.5 md:px-4 md:py-2 font-serif text-[10px] md:text-xs text-primary tracking-widest uppercase shrink-0">
           {T.combat_log[l]}
         </div>

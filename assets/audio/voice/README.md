@@ -1,19 +1,23 @@
-# Voice Pack Structure
+# Voice Pack Structure (RU/EN)
 
-This folder contains text scripts for voice recording and a manifest.
+Voice data is now split by language for each channel.
 
-## Channels
-- lore
-- quests
-- npcDialogue
+## Folder layout
+- assets/audio/voice/lore/ru
+- assets/audio/voice/lore/en
+- assets/audio/voice/quests/ru
+- assets/audio/voice/quests/en
+- assets/audio/voice/npc_dialogues/ru
+- assets/audio/voice/npc_dialogues/en
 
-## Files
-- lore/lore_voice_lines.txt
-- quests/quest_voice_lines.txt
-- npc_dialogues/npc_dialogue_lines.txt
-- voice_manifest.json
+## Naming
+- File name must match line id exactly.
+- Example: lore_line_001.ogg exists in both ru/ and en/.
+
+## Source scripts
+- Bilingual originals are kept in channel roots.
+- Language-specific scripts are in ru/en subfolders.
 
 ## Recording guidance
-- Export each line as separate OGG file using the same line id as filename.
-- Keep room tone stable and avoid clipping.
-- Recommended loudness: around -16 LUFS for spoken lines.
+- Export each line as separate OGG, 44.1kHz.
+- Keep narration consistent per character/channel.

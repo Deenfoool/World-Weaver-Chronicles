@@ -1,0 +1,32 @@
+Quest Voice Lines (EN)
+======================
+
+[quest_line_001]
+EN: Clear out wolves threatening the town.
+
+[quest_line_002]
+EN: Drive bandits from South Road.
+
+[quest_line_003]
+EN: Collect swamp herbs for Mira.
+
+[quest_line_004]
+EN: Scout the Ancient Ruins and return alive.
+
+[quest_line_005]
+EN: Bring 4 crystal shards from ruins and caves.
+
+[quest_line_006]
+EN: Eliminate 3 Ashroad Raiders.
+
+[quest_line_007]
+EN: Hunt 3 Frost Wolves in mountain routes.
+
+[quest_line_008]
+EN: Defeat 4 Crystal Wisps for volatile essence.
+
+[quest_line_009]
+EN: Deliver 5 scalehide pieces to Durn.
+
+[quest_line_010]
+EN: Defeat the Stone Revenant beneath the forge paths.

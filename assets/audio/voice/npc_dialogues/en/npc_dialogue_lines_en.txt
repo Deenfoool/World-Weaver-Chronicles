@@ -1,0 +1,236 @@
+NPC Dialogue Voice Lines (EN)
+=============================
+
+[npc_line_001]
+EN: Traveler, darkness grows across the old lands.
+
+[npc_line_002]
+EN: Tell me about the trolls.
+
+[npc_line_003]
+EN: Any work for me?
+
+[npc_line_004]
+EN: I seek greater threats.
+
+[npc_line_005]
+EN: What happened in these lands?
+
+[npc_line_006]
+EN: Any ancient task?
+
+[npc_line_007]
+EN: Goodbye.
+
+[npc_line_008]
+EN: They dwell in the Echoing Cave beyond the pass.
+
+[npc_line_009]
+EN: Understood.
+
+[npc_line_010]
+EN: Slay a cave troll and you will be rewarded.
+
+[npc_line_011]
+EN: I will do it.
+
+[npc_line_012]
+EN: An ancient sentinel woke in the forgotten forge.
+
+[npc_line_013]
+EN: I accept.
+
+[npc_line_014]
+EN: Long ago, runes kept peace. Then greed turned runes into weapons, and the sky bled storms.
+
+[npc_line_015]
+EN: And now?
+
+[npc_line_016]
+EN: Now every road remembers that war. Listen to stone, and it warns before steel does.
+
+[npc_line_017]
+EN: I will remember.
+
+[npc_line_018]
+EN: Reach the Sunken Sanctum and return with your mind intact. Few do.
+
+[npc_line_019]
+EN: I will descend.
+
+[npc_line_020]
+EN: Keep your blade sheathed in town, traveler.
+
+[npc_line_021]
+EN: Any patrol work?
+
+[npc_line_022]
+EN: Bandits still active?
+
+[npc_line_023]
+EN: Any rumors from the gate?
+
+[npc_line_024]
+EN: Understood.
+
+[npc_line_025]
+EN: Walk the Troll Pass twice and report what tracks you saw.
+
+[npc_line_026]
+EN: On my way.
+
+[npc_line_027]
+EN: Bring me bandit bandanas. I need proof before I can mobilize reserves.
+
+[npc_line_028]
+EN: I will collect them.
+
+[npc_line_029]
+EN: Fog near the swamp whispers names. Men hear their own and vanish before dawn.
+
+[npc_line_030]
+EN: I will stay sharp.
+
+[npc_line_031]
+EN: Bring me swamp reagents and I will teach potent mixtures.
+
+[npc_line_032]
+EN: I can gather samples.
+
+[npc_line_033]
+EN: Need antidotes?
+
+[npc_line_034]
+EN: Need goblin reagents?
+
+[npc_line_035]
+EN: Any dangerous brew request?
+
+[npc_line_036]
+EN: Tell me about plague mists.
+
+[npc_line_037]
+EN: Maybe later.
+
+[npc_line_038]
+EN: Brew two antidotes. If your hands stay steady, I will trust you with rarer toxins.
+
+[npc_line_039]
+EN: Deal.
+
+[npc_line_040]
+EN: I need fresh goblin ears. Old samples lose catalytic oils.
+
+[npc_line_041]
+EN: I will hunt them.
+
+[npc_line_042]
+EN: Find and eliminate plague alchemists. Their brews poison the rain itself.
+
+[npc_line_043]
+EN: I will cleanse them.
+
+[npc_line_044]
+EN: Plague mists are not natural. They are distilled fear, given form by broken runes.
+
+[npc_line_045]
+EN: Then we break the source.
+
+[npc_line_046]
+EN: I map routes no one survives twice. Want to test your luck?
+
+[npc_line_047]
+EN: Need pelts?
+
+[npc_line_048]
+EN: Any scouting orders?
+
+[npc_line_049]
+EN: Tell me route lore.
+
+[npc_line_050]
+EN: Later.
+
+[npc_line_051]
+EN: Bring wolf pelts. I reinforce boots for marsh marches.
+
+[npc_line_052]
+EN: I will gather them.
+
+[npc_line_053]
+EN: Enter the Ancient Ruins and return with your own report, not old rumors.
+
+[npc_line_054]
+EN: I will scout it.
+
+[npc_line_055]
+EN: South Road is loud with steel. Whispering Forest is loud with silence. Choose your danger.
+
+[npc_line_056]
+EN: Useful advice.
+
+[npc_line_057]
+EN: Steel keeps promises better than people. Bring ore, I shape destiny.
+
+[npc_line_058]
+EN: Need iron ore?
+
+[npc_line_059]
+EN: Need forge relics?
+
+[npc_line_060]
+EN: Tell me forge history.
+
+[npc_line_061]
+EN: Later.
+
+[npc_line_062]
+EN: Five chunks of iron ore. No sand, no excuses.
+
+[npc_line_063]
+EN: You will have it.
+
+[npc_line_064]
+EN: The Forgotten Forge still breathes heat. Step inside and return alive.
+
+[npc_line_065]
+EN: I can handle it.
+
+[npc_line_066]
+EN: The old smiths etched vows into steel. Their blades hum when oathbreakers are near.
+
+[npc_line_067]
+EN: I hear enough hum already.
+
+[npc_line_068]
+EN: Words survive where walls fall. Bring me truths from the dark.
+
+[npc_line_069]
+EN: Need sanctum notes?
+
+[npc_line_070]
+EN: Need golem records?
+
+[npc_line_071]
+EN: Tell me old lore.
+
+[npc_line_072]
+EN: Farewell.
+
+[npc_line_073]
+EN: Reach the Sunken Sanctum and return with memory intact. That alone is knowledge.
+
+[npc_line_074]
+EN: I will return.
+
+[npc_line_075]
+EN: Defeat the Sentinel Golem and describe the runes that ignite as it falls.
+
+[npc_line_076]
+EN: I accept the trial.
+
+[npc_line_077]
+EN: Before kingdoms, there were Wardens. Before Wardens, there were storms that listened.
+
+[npc_line_078]
+EN: And now storms obey no one.

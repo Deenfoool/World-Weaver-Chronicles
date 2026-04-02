@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameStore } from '../../game/store';
 import { NPC } from '../../game/types';
 import { LOCATIONS } from '../../game/constants';
@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function NPCPanel({ npc, onClose }: Props) {
-  const { settings, acceptQuest, turnInQuest, quests } = useGameStore();
+  const { settings, acceptQuest, turnInQuest, unlockCodexEntry, quests } = useGameStore();
   const [currentNodeId, setCurrentNodeId] = useState<string>(npc.defaultNode);
   
   const l = settings.language;
@@ -26,6 +26,11 @@ export default function NPCPanel({ npc, onClose }: Props) {
     onClose();
     return null;
   }
+
+  useEffect(() => {
+    unlockCodexEntry('npcs', npc.id);
+    unlockCodexEntry('locations', npc.locationId);
+  }, [npc.id, npc.locationId, unlockCodexEntry]);
 
   const handleOptionClick = (option: { action?: string; actionPayload?: string; nextNodeId: string | null }) => {
     if (option.action === 'give_quest' && option.actionPayload) {

@@ -3,7 +3,7 @@ import { T } from '../../game/translations';
 import { Settings, Save, LogOut } from 'lucide-react';
 
 export default function SettingsPanel() {
-  const { settings, setLanguage, setVoiceSetting, saveGame, resetGame } = useGameStore();
+  const { settings, setLanguage, setVoiceSetting, setTutorialEnabled, resetTutorial, saveGame, resetGame } = useGameStore();
   const l = settings.language;
 
   return (
@@ -27,6 +27,31 @@ export default function SettingsPanel() {
               className={`flex-1 py-2 rounded text-sm transition-colors border ${l === 'ru' ? 'bg-primary/20 text-primary border-primary' : 'bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10'}`}
             >
               Русский
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-black/30 border border-white/5 rounded p-4">
+          <label className="text-sm text-muted-foreground block mb-3">{T.settings_tutorial[l]}</label>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3 rounded border border-white/10 bg-black/30 px-3 py-2">
+              <span className="text-sm text-white">{T.settings_tutorial_enable[l]}</span>
+              <button
+                onClick={() => setTutorialEnabled(!settings.tutorial.enabled)}
+                className={`min-w-[74px] px-3 py-1 rounded text-xs font-bold uppercase tracking-wider border transition-colors ${
+                  settings.tutorial.enabled
+                    ? 'bg-primary/20 text-primary border-primary/40'
+                    : 'bg-white/5 text-muted-foreground border-white/10'
+                }`}
+              >
+                {settings.tutorial.enabled ? T.settings_on[l] : T.settings_off[l]}
+              </button>
+            </div>
+            <button
+              onClick={() => resetTutorial()}
+              className="w-full text-xs uppercase tracking-wider px-3 py-2 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
+            >
+              {T.settings_tutorial_reset[l]}
             </button>
           </div>
         </div>

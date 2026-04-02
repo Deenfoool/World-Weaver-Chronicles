@@ -1,30 +1,23 @@
-Lore Voice Lines
-================
+Lore Voice Lines (RU)
+=====================
 
 [lore_line_001]
 RU: Сначала это называли просто бурей. Потом — Рунным Расколом. Башни рассыпались в пепел, реки сменили русла, а дороги начали вести не туда, куда помнили карты.\n\nОкхейвен выжил чудом: крепостные стены держатся на старой клятве стражей, а рынки — на упрямстве тех, кто не согласился исчезнуть.
-EN: At first they called it a storm. Later, the Runebreak. Towers turned to ash, rivers changed their beds, and roads stopped leading where maps remembered.\n\nOakhaven survived by miracle: its walls stand on old warden oaths, and its markets on the stubbornness of people who refused to vanish.
 
 [lore_line_002]
 RU: Ты не избранный из песен и не наследник трона. Ты тот, кто остаётся на ногах после последнего удара.\n\nДля караванов ты — тень у костра на перевале. Для чудовищ — имя, которое звучит перед тем, как гаснет факел.
-EN: You are no chosen hero from songs, no heir to a throne. You are the one still standing after the last blow.\n\nFor caravans, you are a shadow by the passfire. For monsters, your name is what they hear before the torch dies.
 
 [lore_line_003]
 RU: Каждый сорванный заказ — это пустые амбары. Каждый незащищённый путь — это ещё один погребальный костёр.\n\nТы воюешь не за славу. Ты воюешь, чтобы дети в Окхейвене снова различали тишину и страх.
-EN: Every failed contract means empty granaries. Every unguarded road means another funeral pyre.\n\nYou do not fight for glory. You fight so children in Oakhaven can once again tell silence from fear.
 
 [lore_line_004]
 RU: До королей и гербов были Хранители — воины, следопыты и алхимики, державшие равновесие между дикой магией и человеком.\n\nИх руны давно стерлись, но их ремесло живёт в тех, кто выбирает путь клинка, пути следа или пути колбы.
-EN: Before kings and heraldry, there were Wardens — warriors, scouts, and alchemists who kept balance between wild magic and humankind.\n\nTheir runes are gone, but their craft remains in those who choose blade, trail, or flask.
 
 [lore_line_005]
 RU: С этого шага твоя история перестаёт быть слухом и становится следом в летописи.\n\nТвои ответы определят не только числа в листе героя, но и то, как о тебе будут говорить у ворот, в кузнице и у походного огня.
-EN: From this step on, your story stops being rumor and becomes a mark in the chronicle.\n\nYour answers will shape not just numbers on a hero sheet, but how people speak of you at the gate, in the forge, and by campfire.
 
 [lore_line_006]
 RU: Ваши ответы определили стартовый класс и модификаторы персонажа.
-EN: Your answers determined your starting class and stat modifiers.
 
 [lore_line_007]
 RU: Навыки ещё не изучены. Откройте древо и вложите очки.
-EN: No skills learned yet. Open the tree and spend points.

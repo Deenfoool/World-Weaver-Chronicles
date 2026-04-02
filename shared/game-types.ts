@@ -249,6 +249,17 @@ export interface Quest {
     perkId?: string;
     reputation?: { merchantId: string; amount: number }[];
   };
+  expiresAtTick?: number;
+  offerState?: "offered" | "active" | "resolved" | "expired";
+  isEventQuest?: boolean;
+  sourceEventId?: string;
+  eventQuest?: {
+    originType: "war" | "caravan_attack" | "crisis" | "prosperity" | "black_market_opened" | "hub_destroyed" | "hub_founded";
+    targetHubId: string;
+    opponentHubId?: string;
+    sourceHubLevel?: number;
+    branch: "unselected" | "support" | "punish" | "support_a" | "support_b" | "neutral";
+  };
   isTurnInReady?: boolean;
   isCompleted: boolean;
 }
@@ -299,9 +310,87 @@ export interface VoiceSettings {
   npcDialogue: boolean;
 }
 
+export interface TutorialSettings {
+  enabled: boolean;
+  completed: boolean;
+  step: number;
+  seenHints: string[];
+}
+
 export interface GameSettings {
   language: Language;
   voice: VoiceSettings;
+  tutorial: TutorialSettings;
+}
+
+export interface CodexUnlocks {
+  items: string[];
+  locations: string[];
+  npcs: string[];
+  enemies: string[];
+}
+
+export interface HubEconomyState {
+  hubId: string;
+  hubKind: "faction" | "alliance" | "community";
+  wealth: number;
+  level: number;
+  treasury: number;
+  tradeTurnover: number;
+  resources: Record<string, number>;
+  supply: number;
+  demand: number;
+  stability: number;
+  playerRelation: number;
+  levelUpStreak: number;
+  levelDownStreak: number;
+  degradationStreak: number;
+  destroyed: boolean;
+  marketMode: "stable" | "scarcity" | "surplus" | "black_market";
+  blackMarketUntilTick?: number;
+}
+
+export interface TradeRouteState {
+  id: string;
+  fromHubId: string;
+  toHubId: string;
+  distance: number;
+  flow: number;
+  risk: number;
+}
+
+export interface WorldEconomyEvent {
+  id: string;
+  tick: number;
+  type:
+    | "war"
+    | "caravan_attack"
+    | "crisis"
+    | "prosperity"
+    | "black_market_opened"
+    | "hub_destroyed"
+    | "hub_founded"
+    | "player_raid"
+    | "player_investment"
+    | "player_diplomacy"
+    | "player_sabotage";
+  hubId: string;
+  targetHubId?: string;
+  intensity: number;
+}
+
+export interface WorldEconomyState {
+  tick: number;
+  hubs: Record<string, HubEconomyState>;
+  tradeRoutes: Record<string, TradeRouteState>;
+  hubRelations: Record<string, {
+    hubAId: string;
+    hubBId: string;
+    status: "allied" | "neutral" | "conflict";
+    strength: number;
+  }>;
+  spawnedHubIds: string[];
+  events: WorldEconomyEvent[];
 }
 
 export interface SaveData {
@@ -311,6 +400,8 @@ export interface SaveData {
   weatherDuration: number;
   quests: Quest[];
   groundLootByLocation?: Record<string, { itemId: string; quantity: number }[]>;
+  codexUnlocks?: CodexUnlocks;
+  worldEconomy?: WorldEconomyState;
   status: GameStateStatus;
   timestamp: number;
   settings: GameSettings;
