@@ -3,6 +3,7 @@ import { useGameStore } from '../../game/store';
 import { NPC } from '../../game/types';
 import { LOCATIONS } from '../../game/constants';
 import { MessageSquareText, X } from 'lucide-react';
+import { playVoiceText, stopVoicePlayback } from '../../game/voice';
 
 interface Props {
   npc: NPC;
@@ -31,6 +32,13 @@ export default function NPCPanel({ npc, onClose }: Props) {
     unlockCodexEntry('npcs', npc.id);
     unlockCodexEntry('locations', npc.locationId);
   }, [npc.id, npc.locationId, unlockCodexEntry]);
+
+  useEffect(() => {
+    playVoiceText('npcDialogue', node.text[l], l, settings.voice.npcDialogue);
+    return () => {
+      stopVoicePlayback();
+    };
+  }, [node.id, node.text, l, settings.voice.npcDialogue]);
 
   const handleOptionClick = (option: { action?: string; actionPayload?: string; nextNodeId: string | null }) => {
     if (option.action === 'give_quest' && option.actionPayload) {

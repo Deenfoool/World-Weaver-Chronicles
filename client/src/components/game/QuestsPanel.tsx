@@ -2,12 +2,14 @@ import { useGameStore } from '../../game/store';
 import { CheckCircle2, CircleDashed } from 'lucide-react';
 import { LOCATIONS, ENEMIES, NPCS } from '../../game/constants';
 import { T } from '../../game/translations';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { playVoiceText } from '../../game/voice';
 
 export default function QuestsPanel() {
   const { quests, settings, chooseEventQuestBranch, acceptQuest, contributeToQuestTreasury, turnInQuest, worldEconomy, player } = useGameStore();
   const l = settings.language;
   const [previewQuestId, setPreviewQuestId] = useState<string | null>(null);
+  const spokenOfferIdsRef = useRef<Set<string>>(new Set());
   
   const offeredEventQuests = quests.filter(
     (q) => !q.isCompleted && q.isEventQuest && (q.offerState || 'active') === 'offered' && (!q.expiresAtTick || q.expiresAtTick > worldEconomy.tick),
@@ -110,6 +112,18 @@ export default function QuestsPanel() {
       },
     ];
   };
+
+  useEffect(() => {
+    const fresh = offeredEventQuests.find((q) => !spokenOfferIdsRef.current.has(q.id));
+    if (!fresh) return;
+    spokenOfferIdsRef.current.add(fresh.id);
+    playVoiceText(
+      'quests',
+      l === 'ru' ? `Новый контракт: ${fresh.name.ru}` : `New contract available: ${fresh.name.en}`,
+      l,
+      settings.voice.quests,
+    );
+  }, [offeredEventQuests, l, settings.voice.quests]);
 
   return (
     <div className="p-4 space-y-6">

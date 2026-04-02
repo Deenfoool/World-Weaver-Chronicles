@@ -593,6 +593,46 @@ Sabotage:
     - threshold table (hostile -> trusted ally) with gameplay effects,
     - current standings per hub (relation score + tier),
     - chronological reputation change history with reasons.
+
+### 13.15 Debt Closure Pass (All Remaining Items From Last Review)
+- Added automated tests and test runner:
+  - package script: `npm test` (`tsx --test tests/**/*.test.ts`).
+  - new tests:
+    - `tests/economy.delayed-consequences.test.ts` (economy delayed effects),
+    - `tests/quest.chain-rules.test.ts` (escort/chain travel rules),
+    - `tests/save.migration.test.ts` (save migration/versioning).
+  - Verified: all tests pass.
+
+- Balance constants extracted into dedicated config:
+  - file: `client/src/game/economy-balance.ts`.
+  - store now consumes config for key resolution and player-action economy deltas
+    (support/punish, raid/diplomacy/sabotage, route pressure knobs).
+
+- Reputation reason localization upgraded:
+  - reputation entries now support `reasonKey` in data model.
+  - `FactionJournalPanel` localizes reason text from keys for RU/EN.
+  - fallback to raw reason remains for backward compatibility.
+
+- Delayed consequences timeline added in UI:
+  - Reputation Journal now includes "Delayed Consequences Timeline" with due tick, kind, and intensity.
+
+- Market analytics view added:
+  - Reputation Journal now includes "Hub Market Analytics":
+    - market mode per hub,
+    - demand/supply spread,
+    - buy/sell pressure hints.
+
+- Save versioning and migration strategy implemented:
+  - `SaveData.saveVersion` added.
+  - current version constant in store: `SAVE_VERSION = 2`.
+  - migration hook `migrateSaveData()` normalizes legacy saves and upgrades structure safely.
+
+- Runtime voice playback integrated (channel-aware):
+  - new utility: `client/src/game/voice.ts` using browser SpeechSynthesis fallback runtime.
+  - NPC dialogue voice playback in `NPCPanel` (respects `voice.npcDialogue`).
+  - quest-contract voice notifications in `QuestsPanel` (respects `voice.quests`).
+  - intro lore narration playback in `GameLayout` (respects `voice.lore`).
+  - Existing voice toggles from settings now control real runtime narration behavior.
 - Bestiary:
   - client/src/components/game/BestiaryPanel.tsx
 - Audio manifest:

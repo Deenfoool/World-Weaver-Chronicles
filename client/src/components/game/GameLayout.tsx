@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { T } from '../../game/translations';
 import { CharacterCreationBonuses } from '../../game/store';
 import { WorldEconomyEvent } from '../../game/types';
+import { playVoiceText } from '../../game/voice';
 
 type PreloadTask = {
   id: string;
@@ -416,6 +417,14 @@ export default function GameLayout() {
           : 'From this step on, your story stops being rumor and becomes a mark in the chronicle.\n\nYour answers will shape not just numbers on a hero sheet, but how people speak of you at the gate, in the forge, and by campfire.',
     },
   ];
+
+  useEffect(() => {
+    if (player.classId) return;
+    if (!settings.voice.lore) return;
+    const line = introLore[introStep];
+    if (!line) return;
+    playVoiceText('lore', line.text, l, settings.voice.lore);
+  }, [introStep, player.classId, settings.voice.lore, l]);
 
   const creationQuestions: CreationQuestion[] = [
     {

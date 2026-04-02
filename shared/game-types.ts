@@ -399,6 +399,19 @@ export interface ReputationLogEntry {
   hubId: string;
   delta: number;
   reason: string;
+  reasonKey?:
+    | "quest_support"
+    | "quest_punish"
+    | "quest_neutral"
+    | "quest_side_choice"
+    | "delay_retaliation"
+    | "delay_aid_arrival"
+    | "delay_tariff_relief"
+    | "delay_smuggler_backlash"
+    | "player_investment"
+    | "player_diplomacy"
+    | "player_raid"
+    | "player_sabotage";
   source: "quest_resolution" | "delayed_consequence" | "player_action";
   relatedHubId?: string;
 }
@@ -431,6 +444,7 @@ export interface WorldEconomyState {
 }
 
 export interface SaveData {
+  saveVersion?: number;
   player: Player;
   currentLocationId: string;
   currentWeather: WeatherType;

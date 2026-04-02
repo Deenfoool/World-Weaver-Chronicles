@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Player, Quest, GameStateStatus, SaveData, Enemy, Language, WeatherType, DamageType, StatusEffectInstance, StatusEffectType, GameSettings, VoiceChannel, CodexUnlocks, WorldEconomyEvent, WorldEconomyState } from './types';
 import { INITIAL_QUESTS, LOCATIONS, ENEMIES, ITEMS, ALL_QUESTS, WEATHER, SKILLS, RECIPES, CLASSES, MERCHANTS } from './constants';
 import { getTelegramUserId } from '@/lib/telegram';
+import { ECONOMY_BALANCE } from './economy-balance';
 
 type CombatTarget = 'self' | 'enemy';
 export interface CharacterCreationBonuses {
@@ -118,6 +119,7 @@ const STARTING_PLAYER: Player = {
 };
 
 const SAVE_KEY = 'eternal_quest_save';
+const SAVE_VERSION = 2;
 const DEFAULT_SETTINGS: GameSettings = {
   language: 'en',
   voice: {
@@ -459,7 +461,7 @@ function expandHubsIfEligible(seed: WorldEconomyState) {
   return { worldEconomy: withEvent, spawnedHubId: nextBlueprint.id };
 }
 
-function createDefaultWorldEconomy(): WorldEconomyState {
+export function createDefaultWorldEconomy(): WorldEconomyState {
   const hubLocations = Object.values(LOCATIONS)
     .filter((loc) => loc.type === 'hub')
   const hubs = hubLocations.reduce<WorldEconomyState['hubs']>((acc, hub) => {
@@ -651,6 +653,20 @@ function normalizeWorldEconomy(input: unknown): WorldEconomyState {
         const source = src.source === 'quest_resolution' || src.source === 'delayed_consequence' || src.source === 'player_action'
           ? src.source
           : 'quest_resolution';
+        const reasonKey = src.reasonKey === 'quest_support'
+          || src.reasonKey === 'quest_punish'
+          || src.reasonKey === 'quest_neutral'
+          || src.reasonKey === 'quest_side_choice'
+          || src.reasonKey === 'delay_retaliation'
+          || src.reasonKey === 'delay_aid_arrival'
+          || src.reasonKey === 'delay_tariff_relief'
+          || src.reasonKey === 'delay_smuggler_backlash'
+          || src.reasonKey === 'player_investment'
+          || src.reasonKey === 'player_diplomacy'
+          || src.reasonKey === 'player_raid'
+          || src.reasonKey === 'player_sabotage'
+          ? src.reasonKey
+          : undefined;
         const delta = Number.isFinite(src.delta) ? clamp(Math.floor(src.delta), -100, 100) : 0;
         if (delta === 0) return null;
         return {
@@ -659,6 +675,7 @@ function normalizeWorldEconomy(input: unknown): WorldEconomyState {
           hubId: src.hubId,
           delta,
           reason: typeof src.reason === 'string' && src.reason.length > 0 ? src.reason : 'Reputation shift',
+          reasonKey,
           source,
           relatedHubId: typeof src.relatedHubId === 'string' ? src.relatedHubId : undefined,
         } as WorldEconomyState['reputationLog'][number];
@@ -668,7 +685,7 @@ function normalizeWorldEconomy(input: unknown): WorldEconomyState {
   };
 }
 
-function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather: WeatherType): WorldEconomyState {
+export function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather: WeatherType): WorldEconomyState {
   const nextTick = seed.tick + 1;
   const events = [...(seed.events || [])].slice(-(ECONOMY_EVENT_LIMIT - 6));
   let reputationLog = [...(seed.reputationLog || [])].slice(-REPUTATION_LOG_LIMIT);
@@ -993,6 +1010,7 @@ function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather: Weath
           hubId: cons.triggerHubId,
           delta: nextHub.playerRelation - triggerHub.playerRelation,
           reason: 'Retaliation fallout after earlier conflict choices',
+          reasonKey: 'delay_retaliation',
           source: 'delayed_consequence',
           relatedHubId: targetHubId,
         });
@@ -1024,6 +1042,7 @@ function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather: Weath
           hubId: cons.triggerHubId,
           delta: nextHub.playerRelation - triggerHub.playerRelation,
           reason: 'Aid and reconstruction gratitude reached local authorities',
+          reasonKey: 'delay_aid_arrival',
           source: 'delayed_consequence',
         });
       }
@@ -1061,6 +1080,7 @@ function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather: Weath
           hubId: cons.triggerHubId,
           delta: nextHub.playerRelation - triggerHub.playerRelation,
           reason: 'Tariff relief and diplomatic pressure lowered market tension',
+          reasonKey: 'delay_tariff_relief',
           source: 'delayed_consequence',
           relatedHubId: targetHubId,
         });
@@ -1091,6 +1111,7 @@ function simulateWorldEconomyTick(seed: WorldEconomyState, currentWeather: Weath
           hubId: cons.triggerHubId,
           delta: nextHub.playerRelation - triggerHub.playerRelation,
           reason: 'Crackdown backlash from smuggler networks',
+          reasonKey: 'delay_smuggler_backlash',
           source: 'delayed_consequence',
         });
       }
@@ -1167,7 +1188,7 @@ function pickEscortOriginHub(targetHubId: string): string {
   return scored[0].hubId;
 }
 
-function buildEscortRoute(targetHubId: string, killCount: number) {
+export function buildEscortRoute(targetHubId: string, killCount: number) {
   const originHubId = pickEscortOriginHub(targetHubId);
   const route = findLocationPath(originHubId, targetHubId) || [originHubId, targetHubId];
   const roadNodes = route.filter((locId) => LOCATIONS[locId]?.type !== 'hub');
@@ -1176,9 +1197,11 @@ function buildEscortRoute(targetHubId: string, killCount: number) {
     ambushLocationIds.push(roadNodes[i]);
   }
   let idx = 0;
-  while (ambushLocationIds.length < killCount && route.length > 1) {
-    const fallback = route[Math.max(1, Math.min(route.length - 2, idx % Math.max(1, route.length - 1)))];
-    ambushLocationIds.push(fallback || route[route.length - 1]);
+  while (ambushLocationIds.length < killCount) {
+    const fallback = route.length > 1
+      ? route[Math.max(1, Math.min(route.length - 2, idx % Math.max(1, route.length - 1)))]
+      : route[0];
+    ambushLocationIds.push(fallback || targetHubId);
     idx += 1;
   }
   return {
@@ -1188,10 +1211,34 @@ function buildEscortRoute(targetHubId: string, killCount: number) {
   };
 }
 
+export function shouldAbandonCombatChainOnTravel(
+  currentLocationId: string,
+  nextLocationId: string,
+  chainLocationId: string,
+  escortRoute: string[],
+): boolean {
+  if (nextLocationId === currentLocationId) return false;
+  const inLocalChain = chainLocationId === currentLocationId || escortRoute.includes(currentLocationId);
+  if (!inLocalChain) return false;
+  if (escortRoute.length > 0 && escortRoute.includes(nextLocationId)) return false;
+  return true;
+}
+
 function riskSpikeFromWeather(currentWeather: WeatherType, stability: number): boolean {
   const weatherRisk = currentWeather === 'storm' ? 0.5 : currentWeather === 'snow' ? 0.35 : currentWeather === 'rain' ? 0.2 : 0.08;
   const instability = Math.max(0, (55 - stability) / 100);
   return Math.random() < weatherRisk * (1 + instability);
+}
+
+export function migrateSaveData(input: SaveData): SaveData {
+  const fromVersion = Number.isFinite(input.saveVersion) ? Number(input.saveVersion) : 1;
+  if (fromVersion >= SAVE_VERSION) return input;
+  const migrated: SaveData = {
+    ...input,
+    saveVersion: SAVE_VERSION,
+    worldEconomy: normalizeWorldEconomy(input.worldEconomy),
+  };
+  return migrated;
 }
 
 async function loadRemoteSave(userId: string): Promise<SaveData | null> {
@@ -2829,28 +2876,30 @@ export const useGameStore = create<GameState>((set, get) => {
         if (worldEconomy.hubs[targetHubId]) {
           if (branch === 'support' || branch === 'support_a') {
             worldEconomy = updateHubEconomy(worldEconomy, targetHubId, {
-              wealth: 40,
-              stability: 8,
-              playerRelation: 9,
-              demand: -3,
-              supply: 4,
+              wealth: ECONOMY_BALANCE.questResolution.support.wealth,
+              stability: ECONOMY_BALANCE.questResolution.support.stability,
+              playerRelation: ECONOMY_BALANCE.questResolution.support.relation,
+              demand: ECONOMY_BALANCE.questResolution.support.demand,
+              supply: ECONOMY_BALANCE.questResolution.support.supply,
             });
             worldEconomy = appendReputationLog(worldEconomy, {
               hubId: targetHubId,
               delta: 9,
               reason: 'Supported local war economy and supply effort',
+              reasonKey: 'quest_support',
               source: 'quest_resolution',
               relatedHubId: otherHubId,
             });
             if (otherHubId && worldEconomy.hubs[otherHubId]) {
               worldEconomy = updateHubEconomy(worldEconomy, otherHubId, {
-                playerRelation: -8,
+                playerRelation: ECONOMY_BALANCE.questResolution.sideRelationPenalty,
                 stability: -2,
               });
               worldEconomy = appendReputationLog(worldEconomy, {
                 hubId: otherHubId,
                 delta: -8,
                 reason: 'Backed opposing side in conflict',
+                reasonKey: 'quest_side_choice',
                 source: 'quest_resolution',
                 relatedHubId: targetHubId,
               });
@@ -2875,27 +2924,29 @@ export const useGameStore = create<GameState>((set, get) => {
             });
           } else if (branch === 'support_b' && otherHubId && worldEconomy.hubs[otherHubId]) {
             worldEconomy = updateHubEconomy(worldEconomy, otherHubId, {
-              wealth: 40,
-              stability: 8,
-              playerRelation: 9,
-              demand: -3,
-              supply: 4,
+              wealth: ECONOMY_BALANCE.questResolution.support.wealth,
+              stability: ECONOMY_BALANCE.questResolution.support.stability,
+              playerRelation: ECONOMY_BALANCE.questResolution.support.relation,
+              demand: ECONOMY_BALANCE.questResolution.support.demand,
+              supply: ECONOMY_BALANCE.questResolution.support.supply,
             });
             worldEconomy = appendReputationLog(worldEconomy, {
               hubId: otherHubId,
               delta: 9,
               reason: 'Supported requested side in active war',
+              reasonKey: 'quest_side_choice',
               source: 'quest_resolution',
               relatedHubId: targetHubId,
             });
             worldEconomy = updateHubEconomy(worldEconomy, targetHubId, {
-              playerRelation: -8,
+              playerRelation: ECONOMY_BALANCE.questResolution.sideRelationPenalty,
               stability: -2,
             });
             worldEconomy = appendReputationLog(worldEconomy, {
               hubId: targetHubId,
               delta: -8,
               reason: 'Chose rival side in war',
+              reasonKey: 'quest_side_choice',
               source: 'quest_resolution',
               relatedHubId: otherHubId,
             });
@@ -2920,23 +2971,25 @@ export const useGameStore = create<GameState>((set, get) => {
             });
           } else if (branch === 'neutral') {
             worldEconomy = updateHubEconomy(worldEconomy, targetHubId, {
-              playerRelation: -3,
+              playerRelation: ECONOMY_BALANCE.questResolution.neutralRelationPenalty,
             });
             worldEconomy = appendReputationLog(worldEconomy, {
               hubId: targetHubId,
               delta: -3,
               reason: 'Stayed neutral during strategic conflict',
+              reasonKey: 'quest_neutral',
               source: 'quest_resolution',
               relatedHubId: otherHubId,
             });
             if (otherHubId && worldEconomy.hubs[otherHubId]) {
               worldEconomy = updateHubEconomy(worldEconomy, otherHubId, {
-                playerRelation: -3,
+                playerRelation: ECONOMY_BALANCE.questResolution.neutralRelationPenalty,
               });
               worldEconomy = appendReputationLog(worldEconomy, {
                 hubId: otherHubId,
                 delta: -3,
                 reason: 'Refused to intervene in conflict',
+                reasonKey: 'quest_neutral',
                 source: 'quest_resolution',
                 relatedHubId: targetHubId,
               });
@@ -2953,16 +3006,17 @@ export const useGameStore = create<GameState>((set, get) => {
             }
           } else if (branch === 'punish') {
             worldEconomy = updateHubEconomy(worldEconomy, targetHubId, {
-              wealth: -48,
-              stability: -10,
-              playerRelation: -10,
-              demand: 4,
-              supply: -4,
+              wealth: ECONOMY_BALANCE.questResolution.punish.wealth,
+              stability: ECONOMY_BALANCE.questResolution.punish.stability,
+              playerRelation: ECONOMY_BALANCE.questResolution.punish.relation,
+              demand: ECONOMY_BALANCE.questResolution.punish.demand,
+              supply: ECONOMY_BALANCE.questResolution.punish.supply,
             });
             worldEconomy = appendReputationLog(worldEconomy, {
               hubId: targetHubId,
               delta: -10,
               reason: 'Punished hub infrastructure and economic capacity',
+              reasonKey: 'quest_punish',
               source: 'quest_resolution',
             });
             worldEconomy = queueEconomyConsequence(worldEconomy, {
@@ -3008,12 +3062,12 @@ export const useGameStore = create<GameState>((set, get) => {
       const currentHubId = state.currentLocationId;
       if (!state.worldEconomy.hubs[hubId]) return;
       let worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
-        supply: -6,
-        demand: 5,
-        stability: -5,
-        playerRelation: -8,
-        wealth: -20,
-        tradeTurnover: -12,
+        supply: ECONOMY_BALANCE.playerActions.raid.supply,
+        demand: ECONOMY_BALANCE.playerActions.raid.demand,
+        stability: ECONOMY_BALANCE.playerActions.raid.stability,
+        playerRelation: ECONOMY_BALANCE.playerActions.raid.relation,
+        wealth: ECONOMY_BALANCE.playerActions.raid.wealth,
+        tradeTurnover: ECONOMY_BALANCE.playerActions.raid.turnover,
       });
       if (state.worldEconomy.hubs[currentHubId] && currentHubId !== hubId) {
         worldEconomy = updateHubRelation(worldEconomy, currentHubId, hubId, -10);
@@ -3022,8 +3076,8 @@ export const useGameStore = create<GameState>((set, get) => {
         if (route.fromHubId === hubId || route.toHubId === hubId) {
           acc[routeId] = {
             ...route,
-            flow: clamp(route.flow - 10, 0, 100),
-            risk: clamp(route.risk + 12, 0, 100),
+            flow: clamp(route.flow + ECONOMY_BALANCE.playerActions.raid.routeFlow, 0, 100),
+            risk: clamp(route.risk + ECONOMY_BALANCE.playerActions.raid.routeRisk, 0, 100),
           };
         } else acc[routeId] = route;
         return acc;
@@ -3039,6 +3093,7 @@ export const useGameStore = create<GameState>((set, get) => {
         hubId,
         delta: -8,
         reason: 'You raided a caravan linked to this hub',
+        reasonKey: 'player_raid',
         source: 'player_action',
         relatedHubId: currentHubId !== hubId ? currentHubId : undefined,
       });
@@ -3070,6 +3125,7 @@ export const useGameStore = create<GameState>((set, get) => {
         hubId,
         delta: Math.max(1, Math.floor(amount / 45)),
         reason: 'You invested funds into hub treasury and production',
+        reasonKey: 'player_investment',
         source: 'player_action',
       });
       set({ player, worldEconomy: withLog });
@@ -3081,11 +3137,11 @@ export const useGameStore = create<GameState>((set, get) => {
       const currentHubId = state.currentLocationId;
       if (!state.worldEconomy.hubs[hubId]) return;
       let worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
-        stability: 3,
-        playerRelation: 6,
+        stability: ECONOMY_BALANCE.playerActions.diplomacy.stability,
+        playerRelation: ECONOMY_BALANCE.playerActions.diplomacy.relation,
       });
       if (state.worldEconomy.hubs[currentHubId] && currentHubId !== hubId) {
-        worldEconomy = updateHubRelation(worldEconomy, currentHubId, hubId, 12);
+        worldEconomy = updateHubRelation(worldEconomy, currentHubId, hubId, ECONOMY_BALANCE.playerActions.diplomacy.relationLinkDelta);
       }
       const withEvent = appendEconomyEvent(worldEconomy, {
         type: 'player_diplomacy',
@@ -3097,6 +3153,7 @@ export const useGameStore = create<GameState>((set, get) => {
         hubId,
         delta: 6,
         reason: 'You negotiated diplomatic concessions',
+        reasonKey: 'player_diplomacy',
         source: 'player_action',
         relatedHubId: currentHubId !== hubId ? currentHubId : undefined,
       });
@@ -3108,12 +3165,12 @@ export const useGameStore = create<GameState>((set, get) => {
       const state = get();
       if (!state.worldEconomy.hubs[hubId]) return;
       const worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
-        wealth: -60,
-        stability: -9,
-        supply: -6,
-        demand: 6,
-        playerRelation: -12,
-        tradeTurnover: -15,
+        wealth: ECONOMY_BALANCE.playerActions.sabotage.wealth,
+        stability: ECONOMY_BALANCE.playerActions.sabotage.stability,
+        supply: ECONOMY_BALANCE.playerActions.sabotage.supply,
+        demand: ECONOMY_BALANCE.playerActions.sabotage.demand,
+        playerRelation: ECONOMY_BALANCE.playerActions.sabotage.relation,
+        tradeTurnover: ECONOMY_BALANCE.playerActions.sabotage.turnover,
       });
       const withEvent = appendEconomyEvent(worldEconomy, {
         type: 'player_sabotage',
@@ -3124,6 +3181,7 @@ export const useGameStore = create<GameState>((set, get) => {
         hubId,
         delta: -12,
         reason: 'You sabotaged production and logistics',
+        reasonKey: 'player_sabotage',
         source: 'player_action',
       });
       set({ worldEconomy: withLog });
@@ -3131,7 +3189,8 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     loadSave: () => {
-      const applySave = (data: SaveData) => {
+      const applySave = (rawData: SaveData) => {
+        const data = migrateSaveData(rawData);
         const loadedPlayer = { ...STARTING_PLAYER, ...data.player };
         if (!loadedPlayer.learnedSkills) loadedPlayer.learnedSkills = {};
         if (!loadedPlayer.knownRecipes) loadedPlayer.knownRecipes = [];
@@ -3195,6 +3254,7 @@ export const useGameStore = create<GameState>((set, get) => {
     saveGame: () => {
       const state = get();
       const saveData: SaveData = {
+        saveVersion: SAVE_VERSION,
         player: state.player,
         currentLocationId: state.currentLocationId,
         currentWeather: state.currentWeather,
@@ -3242,20 +3302,14 @@ export const useGameStore = create<GameState>((set, get) => {
       const state = get();
       const activeChain = findAnyActiveCombatChainQuest(state.quests);
       const escortRoute = activeChain?.eventQuest?.escort?.route || [];
-      const leavingValidEscortRoute =
-        !!activeChain
-        && activeChain.eventQuest?.originType === 'caravan_attack'
-        && activeChain.eventQuest?.branch === 'support'
-        && escortRoute.length > 0
-        && escortRoute.includes(locationId);
       if (
         activeChain
-        && (
-          activeChain.locationId === state.currentLocationId
-          || escortRoute.includes(state.currentLocationId)
+        && shouldAbandonCombatChainOnTravel(
+          state.currentLocationId,
+          locationId,
+          activeChain.locationId,
+          escortRoute,
         )
-        && locationId !== state.currentLocationId
-        && !leavingValidEscortRoute
       ) {
         const penalized = applyChainFailurePenalty(state, state.player, 'abandon');
         set({

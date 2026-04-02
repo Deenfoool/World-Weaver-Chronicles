@@ -10,6 +10,7 @@
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "bot": "tsx server/telegram-bot.ts",
     "check": "tsc",
+    "test": "tsx --test tests/**/*.test.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
