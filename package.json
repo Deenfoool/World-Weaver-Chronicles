@@ -9,6 +9,8 @@
     "build": "tsx script/build.ts",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "bot": "tsx server/telegram-bot.ts",
+    "audio:check": "tsx script/audio-manifest-check.ts",
+    "audio:fix": "tsx script/audio-manifest-check.ts --fix",
     "check": "tsc",
     "test:unit": "tsx --test tests/**/*.test.ts",
     "test:ui": "vitest run tests/ui",

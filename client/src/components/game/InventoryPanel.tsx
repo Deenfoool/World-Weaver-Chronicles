@@ -1,15 +1,13 @@
 import { useGameStore } from '../../game/store';
 import { ITEMS } from '../../game/constants';
-import { Package, Shield, Sword, Beaker, CircleDollarSign, Hammer } from 'lucide-react';
+import { Package, Shield, Sword, Beaker, CircleDollarSign } from 'lucide-react';
 import { ItemType } from '../../game/types';
 import { T } from '../../game/translations';
 import { useMemo, useState } from 'react';
-import CraftingPanel from './CraftingPanel';
 
 export default function InventoryPanel() {
   const { player, equipItem, useItem, settings } = useGameStore();
   const l = settings.language;
-  const [section, setSection] = useState<'inventory' | 'crafting'>('inventory');
   const [filter, setFilter] = useState<'all' | ItemType>('all');
   const [sort, setSort] = useState<'name' | 'weight' | 'rarity'>('name');
   const totalWeight = player.inventory.reduce((sum, invItem) => {
@@ -61,36 +59,6 @@ export default function InventoryPanel() {
 
   return (
     <div className="p-4">
-      <div className="mb-3 flex gap-2">
-        <button
-          onClick={() => setSection('inventory')}
-          className={`px-3 py-1.5 rounded text-[11px] uppercase tracking-wider border transition-colors ${
-            section === 'inventory'
-              ? 'border-primary/40 text-primary bg-primary/15'
-              : 'border-white/10 text-muted-foreground bg-black/35 hover:text-white'
-          }`}
-        >
-          {l === 'ru' ? 'Инвентарь' : 'Inventory'}
-        </button>
-        <button
-          onClick={() => setSection('crafting')}
-          className={`px-3 py-1.5 rounded text-[11px] uppercase tracking-wider border transition-colors flex items-center gap-1 ${
-            section === 'crafting'
-              ? 'border-primary/40 text-primary bg-primary/15'
-              : 'border-white/10 text-muted-foreground bg-black/35 hover:text-white'
-          }`}
-        >
-          <Hammer className="w-3 h-3" />
-          {l === 'ru' ? 'Ремесло' : 'Crafting'}
-        </button>
-      </div>
-
-      {section === 'crafting' ? (
-        <div className="-mx-4">
-          <CraftingPanel />
-        </div>
-      ) : (
-        <>
       <div className="mb-3 text-xs text-muted-foreground font-mono bg-black/40 border border-white/10 rounded px-3 py-2">
         {T.stat_weight[l]}: {totalWeight.toFixed(1)} / {player.carryCapacity.toFixed(1)} ({T.stat_capacity[l]})
         {overload > 0 && <span className="text-destructive ml-2">Overload +{overload.toFixed(1)}</span>}
@@ -177,8 +145,6 @@ export default function InventoryPanel() {
             );
           })}
         </div>
-      )}
-        </>
       )}
     </div>
   );

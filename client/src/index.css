@@ -229,6 +229,27 @@
   animation: glow-breathe 2.4s ease-in-out infinite;
 }
 
+.low-fx body {
+  background-image: var(--game-gradient);
+}
+
+.low-fx .rpg-panel,
+.low-fx .glass-panel {
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+.low-fx .mobile-nav-surface,
+.low-fx .rpg-button {
+  box-shadow: none !important;
+}
+
+.low-fx .animate-in,
+.low-fx .slide-up,
+.low-fx .pulse-gold {
+  animation: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;

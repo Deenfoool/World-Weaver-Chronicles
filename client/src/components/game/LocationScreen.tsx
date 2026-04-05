@@ -314,7 +314,7 @@ export default function LocationScreen({ location, status }: Props) {
             <div className="flex gap-2 mb-2.5">
             <button
               onClick={() => setMenuTab('actions')}
-              className={`flex-1 ${isNarrowMobile ? 'text-[9px]' : 'text-[10px] md:text-xs'} uppercase tracking-[0.18em] py-2 rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${
+              className={`${isMobile ? 'flex-1' : 'flex-[1.1]'} ${isNarrowMobile ? 'text-[9px]' : 'text-[10px] md:text-xs'} uppercase tracking-[0.18em] py-2 rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${
                 menuTab === 'actions'
                   ? 'border-primary/50 text-primary bg-primary/18 shadow-[0_0_24px_rgba(214,170,80,0.24)]'
                   : 'border-white/10 text-muted-foreground bg-black/35 hover:text-white'
@@ -323,10 +323,21 @@ export default function LocationScreen({ location, status }: Props) {
               <ShieldAlert className="w-3.5 h-3.5" />
               {T.actions_title[l]}
             </button>
+            <button
+              onClick={() => setMenuTab('travel')}
+              className={`${isMobile ? 'flex-1' : 'flex-[1.1]'} ${isNarrowMobile ? 'text-[9px]' : 'text-[10px] md:text-xs'} uppercase tracking-[0.18em] py-2 rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${
+                menuTab === 'travel'
+                  ? 'border-primary/50 text-primary bg-primary/18 shadow-[0_0_24px_rgba(214,170,80,0.24)]'
+                  : 'border-white/10 text-muted-foreground bg-black/35 hover:text-white'
+              }`}
+            >
+              <Footprints className="w-3.5 h-3.5" />
+              {l === 'ru' ? 'Маршруты' : 'Routes'}
+            </button>
             {!isMobile && (
               <button
                 onClick={() => setIsMapOpen(true)}
-                className={`flex-1 ${isNarrowMobile ? 'text-[9px]' : 'text-[10px] md:text-xs'} uppercase tracking-[0.18em] py-2 rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${
+                className={`flex-[0.9] ${isNarrowMobile ? 'text-[9px]' : 'text-[10px] md:text-xs'} uppercase tracking-[0.18em] py-2 rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${
                   'border-primary/35 text-primary/90 bg-primary/10 hover:bg-primary/20'
                 }`}
               >
@@ -533,6 +544,7 @@ export default function LocationScreen({ location, status }: Props) {
       language={l}
       currentLocationId={location.id}
       discoveredLocations={player.discoveredLocations || ['town_oakhaven']}
+      fogOfWarEnabled={settings.world.fogOfWar}
       onTravel={travelTo}
     />
     </>

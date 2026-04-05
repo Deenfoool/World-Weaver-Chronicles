@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Player, Quest, GameStateStatus, SaveData, Enemy, Language, WeatherType, DamageType, StatusEffectInstance, StatusEffectType, GameSettings, VoiceChannel, CodexUnlocks, WorldEconomyEvent, WorldEconomyState, GameTimeState } from './types';
 import { INITIAL_QUESTS, LOCATIONS, ENEMIES, ITEMS, ALL_QUESTS, WEATHER, SKILLS, RECIPES, CLASSES, MERCHANTS } from './constants';
-import { getTelegramUserId } from '@/lib/telegram';
+import { getAuthSession } from '@/lib/telegram';
 import { ECONOMY_BALANCE } from './economy-balance';
 import { stopVoicePlayback } from './voice';
 import { playSfx } from './audio';
@@ -51,6 +51,7 @@ interface GameState {
   saveGame: () => void;
   resetGame: () => void;
   setLanguage: (lang: Language) => void;
+  setFogOfWar: (enabled: boolean) => void;
   setVoiceSetting: (channel: VoiceChannel, enabled: boolean) => void;
   setTutorialEnabled: (enabled: boolean) => void;
   advanceTutorialStep: () => void;
@@ -138,6 +139,9 @@ const DEFAULT_SETTINGS: GameSettings = {
     completed: false,
     step: 0,
     seenHints: [],
+  },
+  world: {
+    fogOfWar: true,
   },
 };
 const DEFAULT_CODEX_UNLOCKS: CodexUnlocks = {
@@ -1527,25 +1531,55 @@ export function migrateSaveData(input: SaveData): SaveData {
   return migrated;
 }
 
-async function loadRemoteSave(userId: string): Promise<SaveData | null> {
-  const response = await fetch(`/api/game/save/${userId}`);
-  if (response.status === 404) return null;
+async function loadRemoteSave(): Promise<SaveData | null> {
+  const baseOrigin = typeof window !== 'undefined' && typeof window.location?.origin === 'string' ? window.location.origin : '';
+  if (!baseOrigin || !/^https?:/i.test(baseOrigin)) return null;
+  const response = await fetch(new URL('/api/game/save', baseOrigin).toString(), { credentials: 'include' });
+  if (response.status === 404 || response.status === 401) return null;
   if (!response.ok) throw new Error(`Failed to load remote save: ${response.status}`);
   return response.json();
 }
 
-async function upsertRemoteSave(userId: string, saveData: SaveData): Promise<void> {
-  const response = await fetch(`/api/game/save/${userId}`, {
+async function upsertRemoteSave(saveData: SaveData): Promise<void> {
+  const baseOrigin = typeof window !== 'undefined' && typeof window.location?.origin === 'string' ? window.location.origin : '';
+  if (!baseOrigin || !/^https?:/i.test(baseOrigin)) return;
+  const response = await fetch(new URL('/api/game/save', baseOrigin).toString(), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(saveData),
+    credentials: 'include',
   });
+  if (response.status === 401) return;
   if (!response.ok) throw new Error(`Failed to upsert remote save: ${response.status}`);
 }
 
-async function deleteRemoteSave(userId: string): Promise<void> {
-  const response = await fetch(`/api/game/save/${userId}`, { method: 'DELETE' });
+async function deleteRemoteSave(): Promise<void> {
+  const baseOrigin = typeof window !== 'undefined' && typeof window.location?.origin === 'string' ? window.location.origin : '';
+  if (!baseOrigin || !/^https?:/i.test(baseOrigin)) return;
+  const response = await fetch(new URL('/api/game/save', baseOrigin).toString(), { method: 'DELETE', credentials: 'include' });
+  if (response.status === 401) return;
   if (!response.ok) throw new Error(`Failed to delete remote save: ${response.status}`);
+}
+
+type ServerGameActionPayload =
+  | { type: 'raid_caravan'; hubId: string; currentHubId?: string }
+  | { type: 'invest_hub'; hubId: string; goldAmount: number }
+  | { type: 'run_diplomacy'; hubId: string; currentHubId?: string }
+  | { type: 'sabotage_hub'; hubId: string };
+
+async function runServerGameAction(action: ServerGameActionPayload): Promise<SaveData | null> {
+  const baseOrigin = typeof window !== 'undefined' && typeof window.location?.origin === 'string' ? window.location.origin : '';
+  if (!baseOrigin || !/^https?:/i.test(baseOrigin)) return null;
+  const response = await fetch(new URL('/api/game/action', baseOrigin).toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(action),
+    credentials: 'include',
+  });
+  if (response.status === 401 || response.status === 404) return null;
+  if (!response.ok) throw new Error(`Failed to run server game action: ${response.status}`);
+  const payload = await response.json();
+  return (payload?.save || null) as SaveData | null;
 }
 
 function deepCloneQuests(quests: Quest[]): Quest[] {
@@ -2568,6 +2602,9 @@ export const useGameStore = create<GameState>((set, get) => {
       step: Number.isFinite(input?.tutorial?.step) ? Math.max(0, Math.floor(input.tutorial.step)) : 0,
       seenHints: Array.isArray(input?.tutorial?.seenHints) ? input.tutorial.seenHints.filter((x: unknown) => typeof x === 'string') : [],
     },
+    world: {
+      fogOfWar: input?.world?.fogOfWar !== false,
+    },
   });
 
   const findActiveCombatChainQuest = (quests: Quest[], locationId: string): Quest | null =>
@@ -2986,6 +3023,19 @@ export const useGameStore = create<GameState>((set, get) => {
 
     setLanguage: (lang) => {
       set((state) => ({ settings: { ...state.settings, language: lang } }));
+      get().saveGame();
+    },
+
+    setFogOfWar: (enabled) => {
+      set((state) => ({
+        settings: {
+          ...state.settings,
+          world: {
+            ...state.settings.world,
+            fogOfWar: enabled,
+          },
+        },
+      }));
       get().saveGame();
     },
 
@@ -3457,140 +3507,243 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     raidCaravan: (hubId) => {
-      const state = get();
-      const currentHubId = state.currentLocationId;
-      if (!state.worldEconomy.hubs[hubId]) return;
-      const dayPeriod = getDayPeriodFromTime(state.gameTime);
-      const nightMultiplier = dayPeriod === 'night' ? 1.2 : 1;
-      let worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
-        supply: Math.floor(ECONOMY_BALANCE.playerActions.raid.supply * nightMultiplier),
-        demand: Math.floor(ECONOMY_BALANCE.playerActions.raid.demand * nightMultiplier),
-        stability: Math.floor(ECONOMY_BALANCE.playerActions.raid.stability * nightMultiplier),
-        playerRelation: Math.floor(ECONOMY_BALANCE.playerActions.raid.relation * nightMultiplier),
-        wealth: Math.floor(ECONOMY_BALANCE.playerActions.raid.wealth * nightMultiplier),
-        tradeTurnover: Math.floor(ECONOMY_BALANCE.playerActions.raid.turnover * nightMultiplier),
-      });
-      if (state.worldEconomy.hubs[currentHubId] && currentHubId !== hubId) {
-        worldEconomy = updateHubRelation(worldEconomy, currentHubId, hubId, -10);
+      const applyLocal = () => {
+        const state = get();
+        const currentHubId = state.currentLocationId;
+        if (!state.worldEconomy.hubs[hubId]) return;
+        const dayPeriod = getDayPeriodFromTime(state.gameTime);
+        const nightMultiplier = dayPeriod === 'night' ? 1.2 : 1;
+        let worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
+          supply: Math.floor(ECONOMY_BALANCE.playerActions.raid.supply * nightMultiplier),
+          demand: Math.floor(ECONOMY_BALANCE.playerActions.raid.demand * nightMultiplier),
+          stability: Math.floor(ECONOMY_BALANCE.playerActions.raid.stability * nightMultiplier),
+          playerRelation: Math.floor(ECONOMY_BALANCE.playerActions.raid.relation * nightMultiplier),
+          wealth: Math.floor(ECONOMY_BALANCE.playerActions.raid.wealth * nightMultiplier),
+          tradeTurnover: Math.floor(ECONOMY_BALANCE.playerActions.raid.turnover * nightMultiplier),
+        });
+        if (state.worldEconomy.hubs[currentHubId] && currentHubId !== hubId) {
+          worldEconomy = updateHubRelation(worldEconomy, currentHubId, hubId, -10);
+        }
+        const tradeRoutes = Object.entries(worldEconomy.tradeRoutes).reduce<WorldEconomyState['tradeRoutes']>((acc, [routeId, route]) => {
+          if (route.fromHubId === hubId || route.toHubId === hubId) {
+            acc[routeId] = {
+              ...route,
+              flow: clamp(route.flow + ECONOMY_BALANCE.playerActions.raid.routeFlow, 0, 100),
+              risk: clamp(route.risk + ECONOMY_BALANCE.playerActions.raid.routeRisk, 0, 100),
+            };
+          } else acc[routeId] = route;
+          return acc;
+        }, {});
+        const withRoutes = { ...worldEconomy, tradeRoutes };
+        const withEvent = appendEconomyEvent(withRoutes, {
+          type: 'player_raid',
+          hubId,
+          targetHubId: currentHubId !== hubId ? currentHubId : undefined,
+          intensity: clamp(Math.floor(61 * nightMultiplier), 20, 95),
+        });
+        const withLog = appendReputationLog(withEvent, {
+          hubId,
+          delta: -8,
+          reason: 'You raided a caravan linked to this hub',
+          reasonKey: 'player_raid',
+          source: 'player_action',
+          relatedHubId: currentHubId !== hubId ? currentHubId : undefined,
+        });
+        set({ worldEconomy: withLog });
+        get().saveGame();
+      };
+
+      const authSession = getAuthSession();
+      if (!authSession) {
+        applyLocal();
+        return;
       }
-      const tradeRoutes = Object.entries(worldEconomy.tradeRoutes).reduce<WorldEconomyState['tradeRoutes']>((acc, [routeId, route]) => {
-        if (route.fromHubId === hubId || route.toHubId === hubId) {
-          acc[routeId] = {
-            ...route,
-            flow: clamp(route.flow + ECONOMY_BALANCE.playerActions.raid.routeFlow, 0, 100),
-            risk: clamp(route.risk + ECONOMY_BALANCE.playerActions.raid.routeRisk, 0, 100),
-          };
-        } else acc[routeId] = route;
-        return acc;
-      }, {});
-      const withRoutes = { ...worldEconomy, tradeRoutes };
-      const withEvent = appendEconomyEvent(withRoutes, {
-        type: 'player_raid',
-        hubId,
-        targetHubId: currentHubId !== hubId ? currentHubId : undefined,
-        intensity: clamp(Math.floor(61 * nightMultiplier), 20, 95),
-      });
-      const withLog = appendReputationLog(withEvent, {
-        hubId,
-        delta: -8,
-        reason: 'You raided a caravan linked to this hub',
-        reasonKey: 'player_raid',
-        source: 'player_action',
-        relatedHubId: currentHubId !== hubId ? currentHubId : undefined,
-      });
-      set({ worldEconomy: withLog });
-      get().saveGame();
+
+      const currentHubId = get().currentLocationId;
+      runServerGameAction({ type: 'raid_caravan', hubId, currentHubId })
+        .then((remoteSave) => {
+          if (!remoteSave || !remoteSave.player || !remoteSave.worldEconomy) {
+            applyLocal();
+            return;
+          }
+          set({
+            player: remoteSave.player,
+            worldEconomy: normalizeWorldEconomy(remoteSave.worldEconomy),
+          });
+          get().saveGame();
+        })
+        .catch((error) => {
+          console.error('Failed to run server raid action', error);
+          applyLocal();
+        });
     },
 
     investInHub: (hubId, goldAmount) => {
-      const state = get();
+      const applyLocal = () => {
+        const state = get();
+        const amount = Math.max(0, Math.floor(goldAmount));
+        if (amount <= 0) return;
+        if (state.player.gold < amount) return;
+        if (!state.worldEconomy.hubs[hubId]) return;
+        const player = { ...state.player, gold: state.player.gold - amount };
+        const wealthDelta = Math.floor(amount * 0.7);
+        const worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
+          wealth: wealthDelta,
+          treasury: amount,
+          stability: Math.max(1, Math.floor(amount / 35)),
+          playerRelation: Math.max(1, Math.floor(amount / 45)),
+          tradeTurnover: Math.max(1, Math.floor(amount / 25)),
+        });
+        const withEvent = appendEconomyEvent(worldEconomy, {
+          type: 'player_investment',
+          hubId,
+          intensity: clamp(Math.floor(amount / 8), 8, 90),
+        });
+        const withLog = appendReputationLog(withEvent, {
+          hubId,
+          delta: Math.max(1, Math.floor(amount / 45)),
+          reason: 'You invested funds into hub treasury and production',
+          reasonKey: 'player_investment',
+          source: 'player_action',
+        });
+        set({ player, worldEconomy: withLog });
+        get().saveGame();
+      };
+
+      const authSession = getAuthSession();
+      if (!authSession) {
+        applyLocal();
+        return;
+      }
+
       const amount = Math.max(0, Math.floor(goldAmount));
-      if (amount <= 0) return;
-      if (state.player.gold < amount) return;
-      if (!state.worldEconomy.hubs[hubId]) return;
-      const player = { ...state.player, gold: state.player.gold - amount };
-      const wealthDelta = Math.floor(amount * 0.7);
-      const worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
-        wealth: wealthDelta,
-        treasury: amount,
-        stability: Math.max(1, Math.floor(amount / 35)),
-        playerRelation: Math.max(1, Math.floor(amount / 45)),
-        tradeTurnover: Math.max(1, Math.floor(amount / 25)),
-      });
-      const withEvent = appendEconomyEvent(worldEconomy, {
-        type: 'player_investment',
-        hubId,
-        intensity: clamp(Math.floor(amount / 8), 8, 90),
-      });
-      const withLog = appendReputationLog(withEvent, {
-        hubId,
-        delta: Math.max(1, Math.floor(amount / 45)),
-        reason: 'You invested funds into hub treasury and production',
-        reasonKey: 'player_investment',
-        source: 'player_action',
-      });
-      set({ player, worldEconomy: withLog });
-      get().saveGame();
+      runServerGameAction({ type: 'invest_hub', hubId, goldAmount: amount })
+        .then((remoteSave) => {
+          if (!remoteSave || !remoteSave.player || !remoteSave.worldEconomy) {
+            applyLocal();
+            return;
+          }
+          set({
+            player: remoteSave.player,
+            worldEconomy: normalizeWorldEconomy(remoteSave.worldEconomy),
+          });
+          get().saveGame();
+        })
+        .catch((error) => {
+          console.error('Failed to run server invest action', error);
+          applyLocal();
+        });
     },
 
     runDiplomacy: (hubId) => {
-      const state = get();
-      const currentHubId = state.currentLocationId;
-      if (!state.worldEconomy.hubs[hubId]) return;
-      const dayPeriod = getDayPeriodFromTime(state.gameTime);
-      const morningBonus = dayPeriod === 'morning' ? 2 : 0;
-      let worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
-        stability: ECONOMY_BALANCE.playerActions.diplomacy.stability,
-        playerRelation: ECONOMY_BALANCE.playerActions.diplomacy.relation + morningBonus,
-      });
-      if (state.worldEconomy.hubs[currentHubId] && currentHubId !== hubId) {
-        worldEconomy = updateHubRelation(worldEconomy, currentHubId, hubId, ECONOMY_BALANCE.playerActions.diplomacy.relationLinkDelta);
+      const applyLocal = () => {
+        const state = get();
+        const currentHubId = state.currentLocationId;
+        if (!state.worldEconomy.hubs[hubId]) return;
+        const dayPeriod = getDayPeriodFromTime(state.gameTime);
+        const morningBonus = dayPeriod === 'morning' ? 2 : 0;
+        let worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
+          stability: ECONOMY_BALANCE.playerActions.diplomacy.stability,
+          playerRelation: ECONOMY_BALANCE.playerActions.diplomacy.relation + morningBonus,
+        });
+        if (state.worldEconomy.hubs[currentHubId] && currentHubId !== hubId) {
+          worldEconomy = updateHubRelation(worldEconomy, currentHubId, hubId, ECONOMY_BALANCE.playerActions.diplomacy.relationLinkDelta);
+        }
+        const withEvent = appendEconomyEvent(worldEconomy, {
+          type: 'player_diplomacy',
+          hubId,
+          targetHubId: currentHubId !== hubId ? currentHubId : undefined,
+          intensity: 42,
+        });
+        const withLog = appendReputationLog(withEvent, {
+          hubId,
+          delta: 6 + morningBonus,
+          reason: 'You negotiated diplomatic concessions',
+          reasonKey: 'player_diplomacy',
+          source: 'player_action',
+          relatedHubId: currentHubId !== hubId ? currentHubId : undefined,
+        });
+        set({ worldEconomy: withLog });
+        get().saveGame();
+      };
+
+      const authSession = getAuthSession();
+      if (!authSession) {
+        applyLocal();
+        return;
       }
-      const withEvent = appendEconomyEvent(worldEconomy, {
-        type: 'player_diplomacy',
-        hubId,
-        targetHubId: currentHubId !== hubId ? currentHubId : undefined,
-        intensity: 42,
-      });
-      const withLog = appendReputationLog(withEvent, {
-        hubId,
-        delta: 6 + morningBonus,
-        reason: 'You negotiated diplomatic concessions',
-        reasonKey: 'player_diplomacy',
-        source: 'player_action',
-        relatedHubId: currentHubId !== hubId ? currentHubId : undefined,
-      });
-      set({ worldEconomy: withLog });
-      get().saveGame();
+
+      const currentHubId = get().currentLocationId;
+      runServerGameAction({ type: 'run_diplomacy', hubId, currentHubId })
+        .then((remoteSave) => {
+          if (!remoteSave || !remoteSave.player || !remoteSave.worldEconomy) {
+            applyLocal();
+            return;
+          }
+          set({
+            player: remoteSave.player,
+            worldEconomy: normalizeWorldEconomy(remoteSave.worldEconomy),
+          });
+          get().saveGame();
+        })
+        .catch((error) => {
+          console.error('Failed to run server diplomacy action', error);
+          applyLocal();
+        });
     },
 
     sabotageHub: (hubId) => {
-      const state = get();
-      if (!state.worldEconomy.hubs[hubId]) return;
-      const dayPeriod = getDayPeriodFromTime(state.gameTime);
-      const nightMultiplier = dayPeriod === 'night' ? 1.18 : 1;
-      const worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
-        wealth: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.wealth * nightMultiplier),
-        stability: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.stability * nightMultiplier),
-        supply: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.supply * nightMultiplier),
-        demand: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.demand * nightMultiplier),
-        playerRelation: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.relation * nightMultiplier),
-        tradeTurnover: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.turnover * nightMultiplier),
-      });
-      const withEvent = appendEconomyEvent(worldEconomy, {
-        type: 'player_sabotage',
-        hubId,
-        intensity: clamp(Math.floor(74 * nightMultiplier), 24, 98),
-      });
-      const withLog = appendReputationLog(withEvent, {
-        hubId,
-        delta: -12,
-        reason: 'You sabotaged production and logistics',
-        reasonKey: 'player_sabotage',
-        source: 'player_action',
-      });
-      set({ worldEconomy: withLog });
-      get().saveGame();
+      const applyLocal = () => {
+        const state = get();
+        if (!state.worldEconomy.hubs[hubId]) return;
+        const dayPeriod = getDayPeriodFromTime(state.gameTime);
+        const nightMultiplier = dayPeriod === 'night' ? 1.18 : 1;
+        const worldEconomy = updateHubEconomy(state.worldEconomy, hubId, {
+          wealth: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.wealth * nightMultiplier),
+          stability: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.stability * nightMultiplier),
+          supply: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.supply * nightMultiplier),
+          demand: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.demand * nightMultiplier),
+          playerRelation: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.relation * nightMultiplier),
+          tradeTurnover: Math.floor(ECONOMY_BALANCE.playerActions.sabotage.turnover * nightMultiplier),
+        });
+        const withEvent = appendEconomyEvent(worldEconomy, {
+          type: 'player_sabotage',
+          hubId,
+          intensity: clamp(Math.floor(74 * nightMultiplier), 24, 98),
+        });
+        const withLog = appendReputationLog(withEvent, {
+          hubId,
+          delta: -12,
+          reason: 'You sabotaged production and logistics',
+          reasonKey: 'player_sabotage',
+          source: 'player_action',
+        });
+        set({ worldEconomy: withLog });
+        get().saveGame();
+      };
+
+      const authSession = getAuthSession();
+      if (!authSession) {
+        applyLocal();
+        return;
+      }
+
+      runServerGameAction({ type: 'sabotage_hub', hubId })
+        .then((remoteSave) => {
+          if (!remoteSave || !remoteSave.player || !remoteSave.worldEconomy) {
+            applyLocal();
+            return;
+          }
+          set({
+            player: remoteSave.player,
+            worldEconomy: normalizeWorldEconomy(remoteSave.worldEconomy),
+          });
+          get().saveGame();
+        })
+        .catch((error) => {
+          console.error('Failed to run server sabotage action', error);
+          applyLocal();
+        });
     },
 
     loadSave: () => {
@@ -3644,10 +3797,10 @@ export const useGameStore = create<GameState>((set, get) => {
         }
       }
 
-      const telegramUserId = getTelegramUserId();
-      if (!telegramUserId) return;
+      const authSession = getAuthSession();
+      if (!authSession) return;
 
-      loadRemoteSave(telegramUserId)
+      loadRemoteSave()
         .then((remoteSave) => {
           if (!remoteSave) return;
           if ((remoteSave.timestamp || 0) >= (localData?.timestamp || 0)) applySave(remoteSave);
@@ -3674,9 +3827,9 @@ export const useGameStore = create<GameState>((set, get) => {
         timestamp: Date.now(),
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
-      const telegramUserId = getTelegramUserId();
-      if (telegramUserId) {
-        upsertRemoteSave(telegramUserId, saveData).catch((e) => console.error('Failed to sync remote save', e));
+      const authSession = getAuthSession();
+      if (authSession) {
+        upsertRemoteSave(saveData).catch((e) => console.error('Failed to sync remote save', e));
       }
     },
 
@@ -3699,9 +3852,9 @@ export const useGameStore = create<GameState>((set, get) => {
         combatAdrenaline: 0,
       });
       localStorage.removeItem(SAVE_KEY);
-      const telegramUserId = getTelegramUserId();
-      if (telegramUserId) {
-        deleteRemoteSave(telegramUserId).catch((e) => console.error('Failed to delete remote save', e));
+      const authSession = getAuthSession();
+      if (authSession) {
+        deleteRemoteSave().catch((e) => console.error('Failed to delete remote save', e));
       }
     },
 

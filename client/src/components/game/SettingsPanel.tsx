@@ -1,10 +1,13 @@
 import { useGameStore } from '../../game/store';
 import { T } from '../../game/translations';
 import { Settings, Save, LogOut } from 'lucide-react';
+import { clearAuthSession, getAuthSession } from '@/lib/telegram';
+import AdminPanel from './AdminPanel';
 
 export default function SettingsPanel() {
   const { settings, setLanguage, setVoiceSetting, setTutorialEnabled, resetTutorial, saveGame, resetGame } = useGameStore();
   const l = settings.language;
+  const isAdmin = Boolean(getAuthSession()?.isAdmin);
 
   return (
     <div className="p-4 space-y-6">
@@ -103,7 +106,20 @@ export default function SettingsPanel() {
           >
             <LogOut className="w-4 h-4" /> {T.settings_reset[l]}
           </button>
+
+          <button
+            onClick={async () => {
+              await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined);
+              clearAuthSession();
+              window.location.reload();
+            }}
+            className="w-full rpg-button border-white/20 text-white hover:bg-white/10 flex items-center justify-center gap-2"
+          >
+            <LogOut className="w-4 h-4" /> {l === 'ru' ? 'Выйти из аккаунта' : 'Log out'}
+          </button>
         </div>
+
+        {isAdmin && <AdminPanel />}
       </div>
     </div>
   );

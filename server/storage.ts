@@ -111,4 +111,8 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
+if (process.env.NODE_ENV === "production" && !hasDatabase) {
+  throw new Error("DATABASE_URL is required in production. Refusing to start with in-memory storage.");
+}
+
 export const storage: IStorage = hasDatabase ? new DatabaseStorage() : new MemStorage();

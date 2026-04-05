@@ -332,6 +332,9 @@ export interface GameSettings {
   language: Language;
   voice: VoiceSettings;
   tutorial: TutorialSettings;
+  world: {
+    fogOfWar: boolean;
+  };
 }
 
 export interface CodexUnlocks {

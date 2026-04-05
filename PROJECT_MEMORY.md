@@ -944,6 +944,152 @@ Sabotage:
 - Validation:
   - `npm run check` passed.
   - `npm test` passed (unit `11/11`, UI `3/3`).
+
+### 13.27 Full In-Game Admin Panel (Settings)
+- Added a dedicated admin control surface available only for admin sessions:
+  - New file: `client/src/components/game/AdminPanel.tsx`
+  - Integrated into `client/src/components/game/SettingsPanel.tsx` (shown only when `getAuthSession()?.isAdmin === true`).
+
+- Admin panel sections:
+  - `Player`:
+    - Edit core stats (level, XP, XP to next, skill points, HP/MaxHP, Energy/MaxEnergy, gold, carry capacity).
+    - Grant any item and quantity directly into inventory.
+  - `World`:
+    - Teleport to any location.
+    - Set weather + weather duration.
+    - Set game day/hour directly.
+  - `Economy`:
+    - Pick any hub and edit economy fields:
+      - level, wealth, stability, supply, demand, relation, treasury, turnover, market mode, destroyed flag.
+    - Push manual economy events (war/caravan_attack/crisis/prosperity/black_market_opened) with intensity.
+  - `Quests`:
+    - Inject any quest from `ALL_QUESTS` as `offered` or `active`.
+    - Mark selected active quest turn-in ready.
+    - Force complete selected quest.
+    - Remove selected quest from journal.
+  - `Combat`:
+    - Start debug combat against any enemy from `ENEMIES`.
+    - Force-stop combat and safely reset combat state.
+
+- Persistence:
+  - All admin actions patch Zustand game state and immediately call `saveGame()` to persist.
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit `11/11`, UI `3/3`).
+
+### 13.28 Dedicated Admin Web Page + Fog of War Toggle
+- Added standalone admin browser page route:
+  - `App.tsx` now routes `pathname.startsWith('/admin')` to a dedicated admin console screen.
+  - New page component: `client/src/components/game/AdminConsolePage.tsx`.
+  - Includes:
+    - session/admin access checks,
+    - direct return-to-game button (`/`),
+    - logout button,
+    - embedded full `AdminPanel`.
+
+- Added quick admin-page launch from in-game admin panel:
+  - `AdminPanel.tsx` now includes an “Open admin page” link to `/admin`.
+
+- Added global Fog of War setting:
+  - `GameSettings` extended with `world.fogOfWar`.
+  - Defaults + normalization in store:
+    - default `fogOfWar: true`,
+    - migrated safely in `normalizeSettings(...)`.
+  - New store action:
+    - `setFogOfWar(enabled: boolean)`.
+  - Added admin control button in `AdminPanel` (World tab) for ON/OFF.
+
+- Map integration:
+  - `LocationScreen.tsx` passes `settings.world.fogOfWar` into `WorldMapModal`.
+  - `WorldMapModal.tsx` now respects `fogOfWarEnabled` for:
+    - hidden/visible names of undiscovered points,
+    - unknown hint markers,
+    - route visibility behavior.
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit `11/11`, UI `3/3`).
+
+### 13.29 Security + Stability Hardening Pass
+- Server auth/session hardening:
+  - Added signed `httpOnly` cookie session layer in:
+    - `server/auth.ts`
+  - Routes updated:
+    - login/register now set signed session cookie,
+    - added `GET /api/auth/me`,
+    - added `POST /api/auth/logout`.
+  - Save API now has authenticated canonical endpoints:
+    - `GET /api/game/save`
+    - `PUT /api/game/save`
+    - `DELETE /api/game/save`
+  - Legacy `:userId` endpoints kept for compatibility but protected by ownership/admin checks.
+
+- Sensitive logging fix:
+  - Removed API response body dumping from request logger in `server/index.ts`.
+
+- Client-side session verification:
+  - `App.tsx` now validates session against `/api/auth/me` on startup.
+  - Stale/local-forged sessions are cleared automatically if server auth fails.
+  - `AdminConsolePage.tsx` now verifies admin rights against server session (not only localStorage flags).
+
+- Save sync security + test stability:
+  - Client save sync switched to authenticated endpoints without userId in URL.
+  - Remote sync now runs only when auth session exists.
+  - Added URL-origin guards for non-browser/test environments to avoid invalid fetch URL behavior.
+
+- UI logic fix:
+  - Restored reachable `travel/routes` tab in `LocationScreen.tsx` (removed dead-end state branch).
+
+- Secret hygiene:
+  - Replaced leaked real token placeholder in `.env.example`.
+  - Added required auth/admin env keys (`AUTH_SECRET`, `ADMIN_LOGIN`, `ADMIN_PASSWORD`).
+  - Updated README auth/env/API sections accordingly.
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit `11/11`, UI `3/3`).
+
+### 13.30 Release Hardening + Audio Activation Pass
+- Security and platform hardening:
+  - Added auth endpoint rate-limiting for login/register in `server/routes.ts`.
+  - Added request tracing header and logging correlation:
+    - `X-Request-Id` in `server/index.ts`.
+  - Added production safety guard:
+    - server refuses to start in production without `DATABASE_URL` (`server/storage.ts`).
+  - Added admin runtime control endpoints (server-side admin-only):
+    - `GET /api/admin/runtime`
+    - `PUT /api/admin/runtime`
+    - includes feature-flag-like runtime toggles for operations.
+
+- Client performance improvements:
+  - Added lazy-loading for heavy non-critical panels in `GameLayout.tsx`:
+    - Quests, Settings, Crafting, Bestiary, Faction Journal.
+  - Build now outputs separate chunks for several game panels.
+
+- Audio system activation (requested `.ogg` usage):
+  - Refactored `client/src/game/audio.ts`:
+    - manifest-driven playback (not hardcoded whitelist),
+    - loop channels (`ambience`, `weather`, `music`),
+    - `playLoop(...)` / `stopLoop(...)`.
+  - Connected gameplay ambience in `GameLayout.tsx`:
+    - location-based ambient loops,
+    - weather loop routing (`rain/storm/snow/fog`),
+    - randomized thunder SFX during storms.
+  - Added UI tab-switch SFX on mobile nav interactions.
+  - Crucial serving fix:
+    - mounted `/assets` static path in Express (`server/index.ts`) so real audio files under root `assets/audio` are reachable in runtime.
+
+- Legal/readiness docs:
+  - Added static public documents:
+    - `client/public/privacy.html`
+    - `client/public/terms.html`
+  - Added links from auth screen in `App.tsx`.
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit `11/11`, UI `3/3`).
+  - `npm run build` passed.
 - Bestiary:
   - client/src/components/game/BestiaryPanel.tsx
 - Audio manifest:
@@ -952,6 +1098,106 @@ Sabotage:
   - assets/audio/voice/*
 - Backlog plan:
   - ui_next_steps.txt
+
+### 13.31 Server-Authoritative Hub Actions (Phase 1 Complete)
+- Added server-side authoritative game action engine:
+  - `server/game-actions.ts`
+  - Supports:
+    - `raid_caravan`
+    - `invest_hub`
+    - `run_diplomacy`
+    - `sabotage_hub`
+  - Includes economy mutation, relation updates, trade-route impact, and event append with day-period modifiers.
+
+- Added authenticated action endpoint:
+  - `POST /api/game/action` in `server/routes.ts`
+  - Request validated via discriminated union schema.
+  - Current save loaded from storage, action applied server-side, resulting save validated and persisted.
+  - Returns authoritative `save` payload.
+
+- Client store integration:
+  - Added `runServerGameAction(...)` helper in `client/src/game/store.ts`.
+  - Connected hub actions (`raidCaravan`, `investInHub`, `runDiplomacy`, `sabotageHub`) to server endpoint when session exists.
+  - Added safe local fallback path for offline/error scenarios to preserve playability.
+  - On successful server action, client hydrates authoritative `player + worldEconomy` and re-saves.
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit `11/11`, UI `3/3`).
+
+### 13.32 UX Consistency Fix: Inventory Without Crafting Tab
+- Removed embedded crafting section from inventory panel to align with mobile IA decisions ("crafting should not live in inventory").
+  - Updated: `client/src/components/game/InventoryPanel.tsx`
+  - Inventory now shows only inventory controls/content.
+
+- Build/chunking improvement:
+  - Eliminated mixed import warning for `CraftingPanel` (it is no longer statically imported by `InventoryPanel` while lazy-loaded elsewhere).
+
+- Validation:
+  - `npm run check` passed.
+  - `npm run build` passed (dynamic/static `CraftingPanel` warning gone).
+
+### 13.33 Audio Manifest Reliability Pass
+- Added tooling to keep sound assets and manifest synchronized:
+  - New script: `script/audio-manifest-check.ts`
+  - New npm commands:
+    - `npm run audio:check`
+    - `npm run audio:fix`
+
+- Normalized `assets/audio/audio_manifest.json` to real files on disk:
+  - Removed 42 stale entries pointing to non-existent `.ogg`.
+  - Manifest now contains exactly 24 valid sounds currently available in repository.
+
+- Improved runtime diagnostics in `client/src/game/audio.ts`:
+  - Dev-only warnings for unknown sound IDs.
+  - Dev-only warnings when browser fails to load a declared audio file.
+
+- Docs:
+  - Updated `README.md` quality-check section with `test` and `audio:check`/`audio:fix`.
+
+- Validation:
+  - `npm run audio:check` passed (`24/24` sounds valid).
+  - `npm run check` passed.
+  - `npm test` passed (unit `11/11`, UI `3/3`).
+
+### 13.34 Build Chunking Optimization
+- Added explicit Vite `manualChunks` strategy in `vite.config.ts`:
+  - `vendor-react`
+  - `vendor-state`
+  - `vendor-icons`
+  - `vendor-misc`
+  - `game-core`
+  - `ui-game`
+
+- Result:
+  - Removed monolithic ~700KB single client bundle profile.
+  - Build now emits multiple smaller chunks with better first-load behavior on mobile/weak devices.
+  - Prior dynamic/static warning for `CraftingPanel` remains resolved from 13.32.
+
+- Validation:
+  - `npm run check` passed.
+  - `npm run build` passed.
+  - `npm test` passed (unit `11/11`, UI `3/3`).
+
+### 13.35 Low-FX Runtime Mode + Audio Runtime Safety
+- Added adaptive low-effects runtime mode for weak/mobile devices in `GameLayout.tsx`:
+  - Enables `low-fx` class when:
+    - `prefers-reduced-motion` is active, or
+    - mobile viewport + low memory/CPU hints (`deviceMemory <= 4` or `hardwareConcurrency <= 4`).
+  - Re-evaluates on resize and motion preference changes.
+
+- Added `low-fx` CSS overrides in `client/src/index.css`:
+  - Removes expensive backdrop blur/shadow layers on panels/buttons/navigation.
+  - Simplifies background and disables decorative animations (`animate-in`, `slide-up`, `pulse-gold`).
+
+- Fixed client audio diagnostics safety in `client/src/game/audio.ts`:
+  - Replaced `process.env.NODE_ENV` checks with Vite-safe runtime flag (`import.meta.env.DEV`).
+  - Keeps dev-only warnings for unknown sound IDs and failed file loading without risking browser `process` issues.
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit `11/11`, UI `3/3`).
+  - `npm run build` passed.
 
 ## 11) Handoff Prompt Template For New Chat
 Use this exact starter in a new chat:

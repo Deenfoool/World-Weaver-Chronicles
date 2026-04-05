@@ -15,6 +15,8 @@ npm install
 Create `.env` from `.env.example` and fill:
 
 - `DATABASE_URL` (PostgreSQL)
+- `AUTH_SECRET` (long random string for session signing)
+- `ADMIN_LOGIN` / `ADMIN_PASSWORD` (admin access credentials)
 - `TELEGRAM_BOT_TOKEN` (from BotFather)
 - `MINI_APP_URL` (public HTTPS URL of your app)
 
@@ -72,9 +74,14 @@ npm run db:push
 ## API (first migration step)
 
 - `GET /api/health`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
 - `GET /api/game/content` — shared game content from backend
-- `GET /api/game/save/:userId` — load save by user id
-- `PUT /api/game/save/:userId` — upsert save
+- `GET /api/game/save` — load save for authenticated session
+- `PUT /api/game/save` — upsert save for authenticated session
+- `DELETE /api/game/save` — delete save for authenticated session
 
 ## Telegram Mini App Setup
 
@@ -89,7 +96,7 @@ Client auto-initializes Telegram WebApp SDK in:
 - `client/index.html`
 - `client/src/lib/telegram.ts`
 
-When opened inside Telegram, game save is synced to backend by Telegram `user.id`.
+When opened inside Telegram, game save is synced to backend through authenticated session cookie.
 
 ## Where to Change Content
 
@@ -112,6 +119,14 @@ After editing content, restart dev server if needed.
 
 ```bash
 npm run check
+npm run test
+npm run audio:check
+```
+
+Fix audio manifest automatically:
+
+```bash
+npm run audio:fix
 ```
 
 ## Notes

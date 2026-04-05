@@ -9,6 +9,7 @@ type Props = {
   language: 'en' | 'ru';
   currentLocationId: string;
   discoveredLocations: string[];
+  fogOfWarEnabled: boolean;
   onTravel: (locationId: string) => void;
 };
 
@@ -82,6 +83,7 @@ export default function WorldMapModal({
   language,
   currentLocationId,
   discoveredLocations,
+  fogOfWarEnabled,
   onTravel,
 }: Props) {
   const authSession = getAuthSession();
@@ -332,7 +334,7 @@ export default function WorldMapModal({
               const toPos = getNodePosition(edge.to);
               const fromKnown = discoveredSet.has(edge.from);
               const toKnown = discoveredSet.has(edge.to);
-              const visible = fromKnown || toKnown || edge.from === currentLocationId || edge.to === currentLocationId;
+              const visible = !fogOfWarEnabled || fromKnown || toKnown || edge.from === currentLocationId || edge.to === currentLocationId;
               return (
                 <line
                   key={`${edge.from}_${edge.to}`}
@@ -353,7 +355,7 @@ export default function WorldMapModal({
             const isCurrent = loc.id === currentLocationId;
             const isKnown = discoveredSet.has(loc.id);
             const canTravel = !isCurrent && reachable.has(loc.id);
-            const visibleName = isKnown || isCurrent;
+            const visibleName = !fogOfWarEnabled || isKnown || isCurrent;
             const label = visibleName ? loc.name[language] : (language === 'ru' ? 'Неизвестно' : 'Unknown');
             const typeLabel =
               loc.type === 'hub'
@@ -362,7 +364,7 @@ export default function WorldMapModal({
                   ? (language === 'ru' ? 'Дорога' : 'Road')
                   : (language === 'ru' ? 'Локация' : 'Area');
             const showLabel = isCurrent || canTravel;
-            const showUnknownHint = !isKnown && !isCurrent;
+            const showUnknownHint = fogOfWarEnabled && !isKnown && !isCurrent;
 
             return (
               <button

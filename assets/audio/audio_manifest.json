@@ -1,338 +1,128 @@
 {
+  "version": 1,
+  "format": "ogg",
+  "sampleRate": 44100,
+  "notes": "Drop files by path. Keep loudness around -16 LUFS for SFX and -20 LUFS for music loops.",
   "sounds": {
-    "travel_whoosh_short": {
-      "volume": 0.6,
-      "path": "assets/audio/ambience/travel_whoosh_short.ogg",
-      "loop": false
-    },
-    "enemy_goblin_attack": {
-      "volume": 0.76,
-      "path": "assets/audio/combat/enemy/enemy_goblin_attack.ogg",
-      "loop": false
-    },
-    "amb_town_day_loop": {
-      "volume": 0.38,
-      "path": "assets/audio/ambience/amb_town_day_loop.ogg",
+    "amb_cave_loop": {
+      "path": "assets/audio/ambience/amb_cave_loop.ogg",
+      "volume": 0.42,
       "loop": true
-    },
-    "footstep_wood": {
-      "volume": 0.55,
-      "path": "assets/audio/ambience/footstep_wood.ogg",
-      "loop": false
-    },
-    "craft_start": {
-      "volume": 0.62,
-      "path": "assets/audio/crafting/craft_start.ogg",
-      "loop": false
-    },
-    "item_drink_potion": {
-      "volume": 0.65,
-      "path": "assets/audio/items/item_drink_potion.ogg",
-      "loop": false
-    },
-    "weather_wind_cold_loop": {
-      "volume": 0.35,
-      "path": "assets/audio/weather/weather_wind_cold_loop.ogg",
-      "loop": true
-    },
-    "player_attack_heavy": {
-      "volume": 0.82,
-      "path": "assets/audio/combat/player/player_attack_heavy.ogg",
-      "loop": false
-    },
-    "skill_ultimate_cast": {
-      "volume": 0.85,
-      "path": "assets/audio/skills/skill_ultimate_cast.ogg",
-      "loop": false
-    },
-    "bgm_victory_sting": {
-      "volume": 0.36,
-      "path": "assets/audio/music/bgm_victory_sting.ogg",
-      "loop": false
-    },
-    "player_block": {
-      "volume": 0.72,
-      "path": "assets/audio/combat/player/player_block.ogg",
-      "loop": false
-    },
-    "energy_gain": {
-      "volume": 0.65,
-      "path": "assets/audio/skills/energy_gain.ogg",
-      "loop": false
-    },
-    "amb_ruins_loop": {
-      "volume": 0.4,
-      "path": "assets/audio/ambience/amb_ruins_loop.ogg",
-      "loop": true
-    },
-    "enemy_bandit_attack": {
-      "volume": 0.78,
-      "path": "assets/audio/combat/enemy/enemy_bandit_attack.ogg",
-      "loop": false
-    },
-    "ui_tab_switch": {
-      "volume": 0.55,
-      "path": "assets/audio/ui/ui_tab_switch.ogg",
-      "loop": false
-    },
-    "status_stun_apply": {
-      "volume": 0.7,
-      "path": "assets/audio/skills/status_stun_apply.ogg",
-      "loop": false
-    },
-    "status_poison_apply": {
-      "volume": 0.7,
-      "path": "assets/audio/skills/status_poison_apply.ogg",
-      "loop": false
-    },
-    "player_hit": {
-      "volume": 0.75,
-      "path": "assets/audio/combat/player/player_hit.ogg",
-      "loop": false
-    },
-    "player_down": {
-      "volume": 0.82,
-      "path": "assets/audio/combat/player/player_down.ogg",
-      "loop": false
-    },
-    "quest_progress": {
-      "volume": 0.65,
-      "path": "assets/audio/dialogue/quest_progress.ogg",
-      "loop": false
-    },
-    "loot_pickup": {
-      "volume": 0.62,
-      "path": "assets/audio/items/loot_pickup.ogg",
-      "loop": false
-    },
-    "bgm_hub_calm_loop": {
-      "volume": 0.28,
-      "path": "assets/audio/music/bgm_hub_calm_loop.ogg",
-      "loop": true
-    },
-    "quest_complete": {
-      "volume": 0.8,
-      "path": "assets/audio/dialogue/quest_complete.ogg",
-      "loop": false
     },
     "amb_forest_loop": {
-      "volume": 0.4,
       "path": "assets/audio/ambience/amb_forest_loop.ogg",
+      "volume": 0.4,
       "loop": true
     },
-    "weather_rain_loop": {
-      "volume": 0.35,
-      "path": "assets/audio/weather/weather_rain_loop.ogg",
+    "amb_ruins_loop": {
+      "path": "assets/audio/ambience/amb_ruins_loop.ogg",
+      "volume": 0.4,
       "loop": true
-    },
-    "enemy_death_generic": {
-      "volume": 0.8,
-      "path": "assets/audio/combat/enemy/enemy_death_generic.ogg",
-      "loop": false
-    },
-    "shop_sell": {
-      "volume": 0.65,
-      "path": "assets/audio/economy/shop_sell.ogg",
-      "loop": false
-    },
-    "weather_storm_loop": {
-      "volume": 0.42,
-      "path": "assets/audio/weather/weather_storm_loop.ogg",
-      "loop": true
-    },
-    "player_crit": {
-      "volume": 0.84,
-      "path": "assets/audio/combat/player/player_crit.ogg",
-      "loop": false
-    },
-    "ui_reward_claim": {
-      "volume": 0.75,
-      "path": "assets/audio/ui/ui_reward_claim.ogg",
-      "loop": false
-    },
-    "enemy_hit_generic": {
-      "volume": 0.75,
-      "path": "assets/audio/combat/enemy/enemy_hit_generic.ogg",
-      "loop": false
-    },
-    "craft_success": {
-      "volume": 0.75,
-      "path": "assets/audio/crafting/craft_success.ogg",
-      "loop": false
     },
     "amb_swamp_loop": {
-      "volume": 0.42,
       "path": "assets/audio/ambience/amb_swamp_loop.ogg",
+      "volume": 0.42,
       "loop": true
     },
-    "item_throw_bomb": {
-      "volume": 0.8,
-      "path": "assets/audio/items/item_throw_bomb.ogg",
-      "loop": false
-    },
-    "thunder_strike_1": {
-      "volume": 0.8,
-      "path": "assets/audio/weather/thunder_strike_1.ogg",
-      "loop": false
-    },
-    "cooldown_ready": {
-      "volume": 0.62,
-      "path": "assets/audio/skills/cooldown_ready.ogg",
-      "loop": false
-    },
-    "craft_fail": {
-      "volume": 0.7,
-      "path": "assets/audio/crafting/craft_fail.ogg",
-      "loop": false
-    },
-    "player_parry": {
-      "volume": 0.78,
-      "path": "assets/audio/combat/player/player_parry.ogg",
-      "loop": false
-    },
-    "bgm_boss_loop": {
-      "volume": 0.34,
-      "path": "assets/audio/music/bgm_boss_loop.ogg",
+    "amb_town_day_loop": {
+      "path": "assets/audio/ambience/amb_town_day_loop.ogg",
+      "volume": 0.38,
       "loop": true
-    },
-    "ui_panel_close": {
-      "volume": 0.6,
-      "path": "assets/audio/ui/ui_panel_close.ogg",
-      "loop": false
-    },
-    "npc_dialog_next": {
-      "volume": 0.5,
-      "path": "assets/audio/dialogue/npc_dialog_next.ogg",
-      "loop": false
-    },
-    "player_attack_light": {
-      "volume": 0.75,
-      "path": "assets/audio/combat/player/player_attack_light.ogg",
-      "loop": false
     },
     "coin_jingle": {
-      "volume": 0.7,
       "path": "assets/audio/economy/coin_jingle.ogg",
-      "loop": false
-    },
-    "bgm_explore_tension_loop": {
-      "volume": 0.3,
-      "path": "assets/audio/music/bgm_explore_tension_loop.ogg",
-      "loop": true
-    },
-    "ui_click_soft": {
-      "volume": 0.65,
-      "path": "assets/audio/ui/ui_click_soft.ogg",
-      "loop": false
-    },
-    "loot_rare_pickup": {
-      "volume": 0.75,
-      "path": "assets/audio/items/loot_rare_pickup.ogg",
-      "loop": false
-    },
-    "shop_buy": {
-      "volume": 0.65,
-      "path": "assets/audio/economy/shop_buy.ogg",
-      "loop": false
-    },
-    "enemy_wolf_attack": {
-      "volume": 0.76,
-      "path": "assets/audio/combat/enemy/enemy_wolf_attack.ogg",
-      "loop": false
-    },
-    "footstep_stone": {
-      "volume": 0.55,
-      "path": "assets/audio/ambience/footstep_stone.ogg",
-      "loop": false
-    },
-    "bgm_combat_loop": {
-      "volume": 0.32,
-      "path": "assets/audio/music/bgm_combat_loop.ogg",
-      "loop": true
-    },
-    "inventory_equip": {
-      "volume": 0.68,
-      "path": "assets/audio/items/inventory_equip.ogg",
-      "loop": false
-    },
-    "amb_cave_loop": {
-      "volume": 0.42,
-      "path": "assets/audio/ambience/amb_cave_loop.ogg",
-      "loop": true
-    },
-    "status_bleed_apply": {
       "volume": 0.7,
-      "path": "assets/audio/skills/status_bleed_apply.ogg",
-      "loop": false
-    },
-    "ui_panel_open": {
-      "volume": 0.6,
-      "path": "assets/audio/ui/ui_panel_open.ogg",
-      "loop": false
-    },
-    "player_low_hp_alert": {
-      "volume": 0.55,
-      "path": "assets/audio/combat/player/player_low_hp_alert.ogg",
-      "loop": false
-    },
-    "enemy_ability_cast": {
-      "volume": 0.78,
-      "path": "assets/audio/combat/enemy/enemy_ability_cast.ogg",
-      "loop": false
-    },
-    "skill_active_cast": {
-      "volume": 0.72,
-      "path": "assets/audio/skills/skill_active_cast.ogg",
       "loop": false
     },
     "footstep_dirt": {
-      "volume": 0.55,
       "path": "assets/audio/ambience/footstep_dirt.ogg",
+      "volume": 0.55,
       "loop": false
     },
-    "ui_error_denied": {
-      "volume": 0.7,
-      "path": "assets/audio/ui/ui_error_denied.ogg",
+    "footstep_stone": {
+      "path": "assets/audio/ambience/footstep_stone.ogg",
+      "volume": 0.55,
       "loop": false
     },
-    "enemy_troll_attack": {
-      "volume": 0.84,
-      "path": "assets/audio/combat/enemy/enemy_troll_attack.ogg",
+    "footstep_wood": {
+      "path": "assets/audio/ambience/footstep_wood.ogg",
+      "volume": 0.55,
       "loop": false
     },
-    "quest_turnin": {
+    "shop_buy": {
+      "path": "assets/audio/economy/shop_buy.ogg",
+      "volume": 0.65,
+      "loop": false
+    },
+    "shop_sell": {
+      "path": "assets/audio/economy/shop_sell.ogg",
+      "volume": 0.65,
+      "loop": false
+    },
+    "thunder_strike_1": {
+      "path": "assets/audio/weather/thunder_strike_1.ogg",
       "volume": 0.8,
-      "path": "assets/audio/dialogue/quest_turnin.ogg",
-      "loop": false
-    },
-    "inventory_unequip": {
-      "volume": 0.68,
-      "path": "assets/audio/items/inventory_unequip.ogg",
-      "loop": false
-    },
-    "npc_dialog_open": {
-      "volume": 0.6,
-      "path": "assets/audio/dialogue/npc_dialog_open.ogg",
       "loop": false
     },
     "thunder_strike_2": {
-      "volume": 0.8,
       "path": "assets/audio/weather/thunder_strike_2.ogg",
+      "volume": 0.8,
       "loop": false
     },
-    "quest_accept": {
+    "travel_whoosh_short": {
+      "path": "assets/audio/ambience/travel_whoosh_short.ogg",
+      "volume": 0.6,
+      "loop": false
+    },
+    "ui_click_soft": {
+      "path": "assets/audio/ui/ui_click_soft.ogg",
+      "volume": 0.65,
+      "loop": false
+    },
+    "ui_error_denied": {
+      "path": "assets/audio/ui/ui_error_denied.ogg",
       "volume": 0.7,
-      "path": "assets/audio/dialogue/quest_accept.ogg",
       "loop": false
     },
     "ui_hover_soft": {
-      "volume": 0.45,
       "path": "assets/audio/ui/ui_hover_soft.ogg",
+      "volume": 0.45,
       "loop": false
+    },
+    "ui_panel_close": {
+      "path": "assets/audio/ui/ui_panel_close.ogg",
+      "volume": 0.6,
+      "loop": false
+    },
+    "ui_panel_open": {
+      "path": "assets/audio/ui/ui_panel_open.ogg",
+      "volume": 0.6,
+      "loop": false
+    },
+    "ui_reward_claim": {
+      "path": "assets/audio/ui/ui_reward_claim.ogg",
+      "volume": 0.75,
+      "loop": false
+    },
+    "ui_tab_switch": {
+      "path": "assets/audio/ui/ui_tab_switch.ogg",
+      "volume": 0.55,
+      "loop": false
+    },
+    "weather_rain_loop": {
+      "path": "assets/audio/weather/weather_rain_loop.ogg",
+      "volume": 0.35,
+      "loop": true
+    },
+    "weather_storm_loop": {
+      "path": "assets/audio/weather/weather_storm_loop.ogg",
+      "volume": 0.42,
+      "loop": true
+    },
+    "weather_wind_cold_loop": {
+      "path": "assets/audio/weather/weather_wind_cold_loop.ogg",
+      "volume": 0.35,
+      "loop": true
     }
-  },
-  "notes": "Drop files by path. Keep loudness around -16 LUFS for SFX and -20 LUFS for music loops.",
-  "sampleRate": 44100,
-  "format": "ogg",
-  "version": 1
+  }
 }

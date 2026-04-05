@@ -39,6 +39,31 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("scheduler")) {
+              return "vendor-react";
+            }
+            if (id.includes("/zustand/") || id.includes("/@tanstack/")) {
+              return "vendor-state";
+            }
+            if (id.includes("/lucide-react/")) {
+              return "vendor-icons";
+            }
+            return "vendor-misc";
+          }
+          if (id.includes("/client/src/game/")) {
+            return "game-core";
+          }
+          if (id.includes("/client/src/components/game/")) {
+            return "ui-game";
+          }
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     host: "0.0.0.0",

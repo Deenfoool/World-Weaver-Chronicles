@@ -1,7 +1,8 @@
 import GameLayout from "./components/game/GameLayout";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { clearAuthSession, getAuthSession, setAuthSession } from "./lib/telegram";
 import { apiRequest } from "./lib/queryClient";
+import AdminConsolePage from "./components/game/AdminConsolePage";
 
 type AuthTab = "login" | "register";
 
@@ -89,48 +90,84 @@ function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
             {isLoading ? "Обработка..." : tab === "login" ? "Войти" : "Создать аккаунт"}
           </button>
         </form>
+        <div className="mt-4 flex items-center justify-between text-[11px] text-muted-foreground">
+          <a href="/privacy.html" target="_blank" rel="noreferrer" className="hover:text-primary transition-colors">
+            Privacy
+          </a>
+          <a href="/terms.html" target="_blank" rel="noreferrer" className="hover:text-primary transition-colors">
+            Terms
+          </a>
+        </div>
       </div>
     </div>
   );
 }
 
 function App() {
-  const [isAuthed, setIsAuthed] = useState<boolean>(() => {
-    return Boolean(getAuthSession());
-  });
+  const isAdminRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
+  const [isAuthed, setIsAuthed] = useState<boolean>(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
 
-  const [username, setUsername] = useState<string>(() => getAuthSession()?.username || "");
+  useEffect(() => {
+    let cancelled = false;
+    const verify = async () => {
+      try {
+        const response = await fetch("/api/auth/me", { credentials: "include" });
+        if (!response.ok) throw new Error(`Auth check failed: ${response.status}`);
+        const data = (await response.json()) as { user?: { id: string; username: string; isAdmin?: boolean } };
+        if (!data?.user?.id || !data.user.username) throw new Error("Invalid auth payload");
+        setAuthSession({
+          userId: data.user.id,
+          username: data.user.username,
+          isAdmin: Boolean(data.user.isAdmin),
+        });
+        if (!cancelled) setIsAuthed(true);
+      } catch (_e) {
+        clearAuthSession();
+        if (!cancelled) setIsAuthed(false);
+      } finally {
+        if (!cancelled) setIsCheckingAuth(false);
+      }
+    };
+
+    const local = getAuthSession();
+    if (!local) {
+      setIsCheckingAuth(false);
+      setIsAuthed(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void verify();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-[linear-gradient(180deg,#0b111d,#060910)]">
+        <p className="text-sm text-primary/85 uppercase tracking-[0.18em]">Loading session...</p>
+      </div>
+    );
+  }
 
   if (!isAuthed) {
     return (
       <AuthScreen
         onAuthed={() => {
-          const session = getAuthSession();
-          setUsername(session?.username || "");
           setIsAuthed(true);
         }}
       />
     );
   }
 
-  return (
-    <div className="relative">
-      <div className="absolute top-2 right-2 z-[140] flex items-center gap-2 rounded border border-primary/30 bg-black/70 px-2 py-1 text-[10px] uppercase tracking-wider">
-        <span className="text-primary">{username}</span>
-        <button
-          onClick={() => {
-            clearAuthSession();
-            setUsername("");
-            setIsAuthed(false);
-          }}
-          className="text-muted-foreground hover:text-white transition-colors"
-        >
-          Выход
-        </button>
-      </div>
-      <GameLayout />
-    </div>
-  );
+  if (isAdminRoute) {
+    return <AdminConsolePage />;
+  }
+
+  return <GameLayout />;
 }
 
 export default App;

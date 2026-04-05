@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useGameStore } from '../../game/store';
 import { LOCATIONS, WEATHER, ITEMS, CLASSES, SKILLS } from '../../game/constants';
 import { Progress } from "@/components/ui/progress";
@@ -7,18 +7,23 @@ import { LogOut, Save, Shield, Sword, Heart, Coins, User, Backpack, Map as MapIc
 import CombatScreen from './CombatScreen';
 import LocationScreen from './LocationScreen';
 import InventoryPanel from './InventoryPanel';
-import QuestsPanel from './QuestsPanel';
-import SettingsPanel from './SettingsPanel';
 import SkillsPanel from './SkillsPanel';
-import CraftingPanel from './CraftingPanel';
-import BestiaryPanel from './BestiaryPanel';
-import FactionJournalPanel from './FactionJournalPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { T } from '../../game/translations';
 import { CharacterCreationBonuses } from '../../game/store';
 import { WorldEconomyEvent } from '../../game/types';
 import { playVoiceText } from '../../game/voice';
-import { playSfx } from '../../game/audio';
+import { playLoop, playSfx, stopLoop } from '../../game/audio';
+
+const QuestsPanelLazy = lazy(() => import('./QuestsPanel'));
+const SettingsPanelLazy = lazy(() => import('./SettingsPanel'));
+const CraftingPanelLazy = lazy(() => import('./CraftingPanel'));
+const BestiaryPanelLazy = lazy(() => import('./BestiaryPanel'));
+const FactionJournalPanelLazy = lazy(() => import('./FactionJournalPanel'));
+
+function LazyFallback() {
+  return <div className="p-4 text-xs text-muted-foreground">Loading panel...</div>;
+}
 
 type PreloadTask = {
   id: string;
@@ -316,6 +321,30 @@ export default function GameLayout() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const root = document.documentElement;
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const nav = navigator as Navigator & { deviceMemory?: number };
+
+    const evaluateLowFx = () => {
+      const lowMem = typeof nav.deviceMemory === 'number' && nav.deviceMemory <= 4;
+      const lowCpu = typeof navigator.hardwareConcurrency === 'number' && navigator.hardwareConcurrency <= 4;
+      const mobileScreen = window.innerWidth < 768;
+      const shouldEnable = media.matches || (mobileScreen && (lowMem || lowCpu));
+      root.classList.toggle('low-fx', shouldEnable);
+    };
+
+    evaluateLowFx();
+    media.addEventListener('change', evaluateLowFx);
+    window.addEventListener('resize', evaluateLowFx);
+    return () => {
+      media.removeEventListener('change', evaluateLowFx);
+      window.removeEventListener('resize', evaluateLowFx);
+      root.classList.remove('low-fx');
+    };
+  }, []);
+
+  useEffect(() => {
     const events = worldEconomy?.events || [];
     if (!economyEventsBootstrappedRef.current) {
       events.forEach((event) => seenEconomyEventIdsRef.current.add(event.id));
@@ -377,6 +406,44 @@ export default function GameLayout() {
   }, [economyNotices]);
 
   const location = LOCATIONS[currentLocationId];
+
+  useEffect(() => {
+    const loc = LOCATIONS[currentLocationId];
+    if (!loc) return;
+    const ambienceByType: Record<string, string> = {
+      hub: 'amb_town_day_loop',
+      road: 'amb_ruins_loop',
+      explore: 'amb_forest_loop',
+      camp: 'amb_swamp_loop',
+    };
+    const ambienceId = ambienceByType[loc.type] || 'amb_forest_loop';
+    void playLoop(ambienceId, 'ambience', status === 'combat' ? 0.2 : 1);
+
+    if (currentWeather === 'rain') {
+      void playLoop('weather_rain_loop', 'weather', 0.9);
+    } else if (currentWeather === 'storm') {
+      void playLoop('weather_storm_loop', 'weather', 1);
+    } else if (currentWeather === 'snow' || currentWeather === 'fog') {
+      void playLoop('weather_wind_cold_loop', 'weather', 0.85);
+    } else {
+      stopLoop('weather');
+    }
+
+    return () => {
+      stopLoop('ambience');
+      stopLoop('weather');
+    };
+  }, [currentLocationId, currentWeather, status]);
+
+  useEffect(() => {
+    if (currentWeather !== 'storm') return;
+    const timer = window.setInterval(() => {
+      if (Math.random() < 0.35) {
+        void playSfx(Math.random() < 0.5 ? 'thunder_strike_1' : 'thunder_strike_2', 0.85);
+      }
+    }, 3500);
+    return () => window.clearInterval(timer);
+  }, [currentWeather]);
   
   const bgStyle = {
     backgroundImage: `linear-gradient(to bottom, rgba(15, 18, 25, 0.6), rgba(15, 18, 25, 0.95)), url(${location.image})`,
@@ -1248,17 +1315,39 @@ export default function GameLayout() {
                 <button onClick={() => setDesktopInventoryPanel('inventory')} className={`px-3 py-1 text-xs rounded border ${desktopInventoryPanel === 'inventory' ? 'border-primary/50 text-primary bg-primary/15' : 'border-white/10 text-muted-foreground'}`}>{T.nav_inventory[l]}</button>
                 <button onClick={() => setDesktopInventoryPanel('crafting')} className={`px-3 py-1 text-xs rounded border ${desktopInventoryPanel === 'crafting' ? 'border-primary/50 text-primary bg-primary/15' : 'border-white/10 text-muted-foreground'}`}>{T.nav_crafting[l]}</button>
               </div>
-              {desktopInventoryPanel === 'inventory' ? <InventoryPanel /> : <CraftingPanel />}
+              {desktopInventoryPanel === 'inventory' ? (
+                <InventoryPanel />
+              ) : (
+                <Suspense fallback={<LazyFallback />}>
+                  <CraftingPanelLazy />
+                </Suspense>
+              )}
             </TabsContent>
-            <TabsContent value="quests" className="m-0"><QuestsPanel /></TabsContent>
+            <TabsContent value="quests" className="m-0">
+              <Suspense fallback={<LazyFallback />}>
+                <QuestsPanelLazy />
+              </Suspense>
+            </TabsContent>
             <TabsContent value="codex" className="m-0">
               <div className="px-4 pt-2 pb-1 flex gap-2">
                 <button onClick={() => setDesktopCodexPanel('reputation')} className={`px-3 py-1 text-xs rounded border ${desktopCodexPanel === 'reputation' ? 'border-primary/50 text-primary bg-primary/15' : 'border-white/10 text-muted-foreground'}`}>{l === 'ru' ? 'Репутация' : 'Reputation'}</button>
                 <button onClick={() => setDesktopCodexPanel('bestiary')} className={`px-3 py-1 text-xs rounded border ${desktopCodexPanel === 'bestiary' ? 'border-primary/50 text-primary bg-primary/15' : 'border-white/10 text-muted-foreground'}`}>{l === 'ru' ? 'Бестиарий' : 'Bestiary'}</button>
               </div>
-              {desktopCodexPanel === 'reputation' ? <FactionJournalPanel /> : <BestiaryPanel />}
+              {desktopCodexPanel === 'reputation' ? (
+                <Suspense fallback={<LazyFallback />}>
+                  <FactionJournalPanelLazy />
+                </Suspense>
+              ) : (
+                <Suspense fallback={<LazyFallback />}>
+                  <BestiaryPanelLazy />
+                </Suspense>
+              )}
             </TabsContent>
-            <TabsContent value="settings" className="m-0"><SettingsPanel /></TabsContent>
+            <TabsContent value="settings" className="m-0">
+              <Suspense fallback={<LazyFallback />}>
+                <SettingsPanelLazy />
+              </Suspense>
+            </TabsContent>
           </ScrollArea>
         </Tabs>
       </aside>
@@ -1378,12 +1467,42 @@ export default function GameLayout() {
              {activeTab === 'world' && renderWorld()}
              {activeTab === 'character' && <ScrollArea className="h-full"><CharacterPanel player={player} l={l} /></ScrollArea>}
              {activeTab === 'inventory' && <ScrollArea className="h-full"><InventoryPanel /></ScrollArea>}
-             {activeTab === 'quests' && <ScrollArea className="h-full"><QuestsPanel /></ScrollArea>}
+             {activeTab === 'quests' && (
+               <ScrollArea className="h-full">
+                 <Suspense fallback={<LazyFallback />}>
+                   <QuestsPanelLazy />
+                 </Suspense>
+               </ScrollArea>
+             )}
              {activeTab === 'skills' && <ScrollArea className="h-full"><SkillsPanel /></ScrollArea>}
-             {activeTab === 'crafting' && <ScrollArea className="h-full"><CraftingPanel /></ScrollArea>}
-             {activeTab === 'reputation' && <ScrollArea className="h-full"><FactionJournalPanel /></ScrollArea>}
-             {activeTab === 'bestiary' && <ScrollArea className="h-full"><BestiaryPanel /></ScrollArea>}
-             {activeTab === 'settings' && <ScrollArea className="h-full"><SettingsPanel /></ScrollArea>}
+             {activeTab === 'crafting' && (
+               <ScrollArea className="h-full">
+                 <Suspense fallback={<LazyFallback />}>
+                   <CraftingPanelLazy />
+                 </Suspense>
+               </ScrollArea>
+             )}
+             {activeTab === 'reputation' && (
+               <ScrollArea className="h-full">
+                 <Suspense fallback={<LazyFallback />}>
+                   <FactionJournalPanelLazy />
+                 </Suspense>
+               </ScrollArea>
+             )}
+             {activeTab === 'bestiary' && (
+               <ScrollArea className="h-full">
+                 <Suspense fallback={<LazyFallback />}>
+                   <BestiaryPanelLazy />
+                 </Suspense>
+               </ScrollArea>
+             )}
+             {activeTab === 'settings' && (
+               <ScrollArea className="h-full">
+                 <Suspense fallback={<LazyFallback />}>
+                   <SettingsPanelLazy />
+                 </Suspense>
+               </ScrollArea>
+             )}
            </div>
         </div>
 
@@ -1470,7 +1589,10 @@ function NavBtn({ icon, label, isActive, onClick, tutorialId }: { icon: ReactNod
     <button 
       data-tutorial-id={tutorialId}
       data-active={isActive ? 'true' : 'false'}
-      onClick={onClick} 
+      onClick={() => {
+        void playSfx('ui_tab_switch', 0.9);
+        onClick();
+      }}
       className="mobile-nav-btn"
     >
       {icon}
