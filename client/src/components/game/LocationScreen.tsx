@@ -35,6 +35,10 @@ const NPC_META: Record<
   npc_warden_rook: { accent: '#8caf66', role: { en: 'Marsh Warden', ru: 'Болотный хранитель' }, Icon: Shield },
   npc_herbalist_vesk: { accent: '#6ebc79', role: { en: 'Union Herbalist', ru: 'Травник союза' }, Icon: FlaskConical },
   npc_tinker_juno: { accent: '#8f93d2', role: { en: 'Field Tinker', ru: 'Полевой техник' }, Icon: Hammer },
+  npc_prefect_aurelia: { accent: '#d9b67a', role: { en: 'Forum Prefect', ru: 'Префект форума' }, Icon: Crown },
+  npc_artificer_kael: { accent: '#c98357', role: { en: 'Chief Artificer', ru: 'Главный артификер' }, Icon: Hammer },
+  npc_medic_selene: { accent: '#6eb9a1', role: { en: 'Field Medic', ru: 'Полевой медик' }, Icon: FlaskConical },
+  npc_pathfinder_orin: { accent: '#7ca4d9', role: { en: 'Route Pathfinder', ru: 'Проводник маршрутов' }, Icon: Compass },
 };
 
 function formatEconomyEvent(
@@ -211,17 +215,17 @@ export default function LocationScreen({ location, status }: Props) {
     <div className="flex-1 flex flex-col w-full h-full p-2 md:p-4 gap-2 md:gap-4 overflow-hidden">
       
       <div className="text-center mb-2 md:mb-6 mt-2 md:mt-6 shrink-0">
-        <div className="inline-flex items-center justify-center px-3 py-0.5 md:px-4 md:py-1 rounded-full border border-primary/30 bg-black/40 text-primary text-[9px] md:text-xs uppercase tracking-widest mb-2 md:mb-4 backdrop-blur-sm">
+        <div className="inline-flex items-center justify-center px-3 py-0.5 md:px-4 md:py-1 rounded-full border border-primary/35 bg-black/45 text-primary text-[9px] md:text-xs uppercase tracking-widest mb-2 md:mb-4 backdrop-blur-sm pulse-gold">
           {location.type === 'hub' ? T.safe_zone[l] : T.danger_zone[l]}
         </div>
         <h1 className="text-2xl md:text-6xl font-serif text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] mb-2 md:mb-4 uppercase leading-tight">
           {location.name[l]}
         </h1>
-        <p className="text-xs md:text-lg text-muted-foreground max-w-2xl mx-auto italic drop-shadow-md bg-black/40 p-2 md:p-4 rounded-lg backdrop-blur-sm border border-white/5 line-clamp-3 md:line-clamp-none">
+        <p className="text-xs md:text-lg text-muted-foreground max-w-2xl mx-auto italic drop-shadow-md bg-black/48 p-2 md:p-4 rounded-lg backdrop-blur-sm border border-primary/20 line-clamp-3 md:line-clamp-none">
           "{location.description[l]}"
         </p>
         {location.possibleLoot && location.possibleLoot.length > 0 && (
-          <div className="mt-2 text-[10px] md:text-xs text-primary/80 bg-black/40 border border-primary/20 rounded px-3 py-2 inline-block">
+          <div className="mt-2 text-[10px] md:text-xs text-primary/85 bg-black/45 border border-primary/25 rounded px-3 py-2 inline-block">
             {l === 'ru' ? 'Лут на земле: ' : 'Ground loot: '}
             {location.possibleLoot
               .map((id) => (id === 'gold' ? (l === 'ru' ? 'Золото' : 'Gold') : ITEMS[id]?.name[l] || id))
@@ -229,7 +233,7 @@ export default function LocationScreen({ location, status }: Props) {
           </div>
         )}
         {hubEconomy && (
-          <div className="mt-2 text-[10px] md:text-xs text-primary/90 bg-black/45 border border-primary/25 rounded px-3 py-2 inline-flex gap-3 items-center">
+          <div className="mt-2 text-[10px] md:text-xs text-primary/90 bg-black/52 border border-primary/30 rounded px-3 py-2 inline-flex gap-3 items-center shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
             <span>
               {l === 'ru'
                 ? `Тип: ${hubEconomy.hubKind === 'faction' ? 'фракция' : hubEconomy.hubKind === 'alliance' ? 'содружество' : 'сообщество'}`
@@ -256,7 +260,7 @@ export default function LocationScreen({ location, status }: Props) {
               setSheetLevel((prev) => (prev === 0 ? 1 : prev));
             }}
             data-tutorial-id="travel-icon"
-            className="absolute right-2 top-1 w-10 h-10 rounded-full border border-primary/45 bg-black/60 backdrop-blur-md text-primary flex items-center justify-center shadow-[0_0_22px_rgba(214,170,80,0.35)] animate-pulse hover:scale-105 transition-transform"
+            className="absolute right-2 top-1 w-10 h-10 rounded-full border border-primary/45 bg-black/70 backdrop-blur-md text-primary flex items-center justify-center shadow-[0_0_22px_rgba(214,170,80,0.35)] pulse-gold hover:scale-105 transition-transform"
             aria-label={l === 'ru' ? 'Открыть путешествия' : 'Open travel'}
             title={l === 'ru' ? 'Путешествия' : 'Travel'}
           >
@@ -283,7 +287,7 @@ export default function LocationScreen({ location, status }: Props) {
 
           <div className="absolute -inset-x-8 -top-10 h-24 bg-[radial-gradient(circle,rgba(210,162,74,0.18),transparent_70%)] pointer-events-none" />
           <div
-            className={`relative rounded-2xl border border-primary/25 bg-[linear-gradient(135deg,rgba(9,13,24,0.72),rgba(4,7,14,0.58))] backdrop-blur-xl shadow-[0_16px_48px_rgba(0,0,0,0.52)] p-2.5 md:p-3.5 overflow-hidden transition-[height,opacity,transform] duration-300 ${isDraggingSheet ? '' : 'ease-out'}`}
+            className={`relative rounded-2xl border border-primary/28 bg-[linear-gradient(135deg,rgba(9,13,24,0.82),rgba(4,7,14,0.72))] backdrop-blur-xl shadow-[0_16px_48px_rgba(0,0,0,0.52)] p-2.5 md:p-3.5 overflow-hidden transition-[height,opacity,transform] duration-300 ${isDraggingSheet ? '' : 'ease-out'}`}
             style={
               isMobile
                 ? {

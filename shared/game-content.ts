@@ -1,4 +1,14 @@
 import { CharacterClass, Enemy, Item, Location, Merchant, NPC, Quest, Recipe, Skill, WeatherEffect, WeatherType } from './game-types';
+import {
+  EXPANSION_CONNECTIONS,
+  EXPANSION_ENEMIES,
+  EXPANSION_ITEMS,
+  EXPANSION_LOCATIONS,
+  EXPANSION_MERCHANTS,
+  EXPANSION_NPCS,
+  EXPANSION_QUESTS,
+  EXPANSION_RECIPES,
+} from './game-content.expansion';
 
 const EN = 'en';
 const RU = 'ru';
@@ -549,3 +559,19 @@ export const ALL_QUESTS: Record<string, Quest> = {
   quest_runic_trial: { id: 'quest_runic_trial', giverNpcId: 'npc_chronicler_vesna', turnInNpcId: 'npc_chronicler_vesna', name: { [EN]: 'Runic Trial', [RU]: 'Руническое испытание' }, description: { [EN]: 'Defeat the Sentinel Golem and survive to tell the tale.', [RU]: 'Победите Голема-стража и выживите, чтобы рассказать об этом.' }, locationId: 'forgotten_forge', goals: [{ type: 'kill', targetId: 'sentinel_golem', targetCount: 1, currentCount: 0 }], rewards: { xp: 360, gold: 250, items: [{ itemId: 'blade_eclipse', quantity: 1 }], reputation: [{ merchantId: 'merchant_oakhaven', amount: 3 }] }, isTurnInReady: false, isCompleted: false },
   quest_swamp_horror: { id: 'quest_swamp_horror', giverNpcId: 'npc_alchemist_mira', turnInNpcId: 'npc_alchemist_mira', name: { [EN]: 'Heart of the Bog', [RU]: 'Сердце трясины' }, description: { [EN]: 'Defeat 2 Bog Horrors in the Murky Swamp.', [RU]: 'Победите 2 болотных ужаса в Мрачном болоте.' }, locationId: 'swamp_murky', goals: [{ type: 'kill', targetId: 'swamp_thing', targetCount: 2, currentCount: 0 }], rewards: { xp: 190, gold: 145, items: [{ itemId: 'potion_antidote', quantity: 2 }, { itemId: 'bomb_toxic', quantity: 1 }] }, isTurnInReady: false, isCompleted: false },
 };
+
+Object.assign(RECIPES, EXPANSION_RECIPES);
+Object.assign(ITEMS, EXPANSION_ITEMS);
+Object.assign(ENEMIES, EXPANSION_ENEMIES);
+Object.assign(LOCATIONS, EXPANSION_LOCATIONS);
+Object.assign(MERCHANTS, EXPANSION_MERCHANTS);
+Object.assign(NPCS, EXPANSION_NPCS);
+Object.assign(ALL_QUESTS, EXPANSION_QUESTS);
+
+for (const [from, to] of EXPANSION_CONNECTIONS) {
+  const fromLoc = LOCATIONS[from];
+  const toLoc = LOCATIONS[to];
+  if (!fromLoc || !toLoc) continue;
+  if (!fromLoc.connectedLocations.includes(to)) fromLoc.connectedLocations.push(to);
+  if (!toLoc.connectedLocations.includes(from)) toLoc.connectedLocations.push(from);
+}

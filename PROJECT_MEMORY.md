@@ -853,6 +853,97 @@ Sabotage:
 - Validation:
   - `npm run check` passed.
   - `npm test` passed.
+
+### 13.24 Content Expansion + UI Simplification Pass
+- Added a dedicated expansion module:
+  - New file: `shared/game-content.expansion.ts`.
+  - Keeps new content separated from the already-large core `shared/game-content.ts` while still merging at runtime.
+
+- Added major content pack:
+  - Locations: +6
+    - `road_glassway`, `hub_dawnwatch`, `dunes_singed`, `quarry_sunscar`, `observatory_shards`, `catacombs_veil`.
+  - Quests: +8
+    - New Dawnwatch questline connected to new NPCs and region resources.
+  - Enemies: +8
+    - Includes a new boss (`brass_colossus`) and region-specific combat roster.
+  - Items: +22
+    - New materials, consumables, weapons, armor, and recipe scrolls.
+  - Recipes: +6 (in this pass)
+    - New region crafting for weapons/armor/potions.
+  - NPCs: +4
+    - `npc_prefect_aurelia`, `npc_artificer_kael`, `npc_medic_selene`, `npc_pathfinder_orin`.
+  - Merchants: +4
+    - Category-focused inventories per NPC role (contracts / forge / apothecary / trail exchange).
+
+- World integration:
+  - Runtime merge of expansion data into base records via `Object.assign(...)` in `shared/game-content.ts`.
+  - Route graph stitched with symmetric connection patching (`EXPANSION_CONNECTIONS`).
+  - New map coordinates added in `client/src/components/game/WorldMapModal.tsx`.
+  - New NPC role metadata integrated in `client/src/components/game/LocationScreen.tsx`.
+
+- Location visuals generated:
+  - Added unique SVG images for each new location in:
+    - `client/public/images/locations/*.svg`
+  - Wired directly in location definitions.
+
+- UI declutter pass (desktop):
+  - Reduced side-panel tabs from 8 to 5.
+  - Grouped secondary panels into intuitive sub-tabs:
+    - Character + Skills
+    - Inventory + Crafting
+    - Codex: Reputation + Bestiary
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit `11/11`, UI `3/3`).
+
+### 13.25 Visual Upgrade Pass (Production Polish)
+- Global style system refined in `client/src/index.css`:
+  - Added consistent visual FX tokens for panel depth, glows, and border treatment.
+  - Upgraded scrollbar, typography rendering, button behavior, and motion polish.
+  - Added reusable classes: `glass-panel`, `mobile-nav-surface`, `mobile-nav-btn`, `pulse-gold`.
+  - Added reduced-motion fallback for accessibility.
+
+- Core shell polish in `client/src/components/game/GameLayout.tsx`:
+  - Desktop sidebar now uses unified glass panel treatment.
+  - Mobile top bar and settings affordance improved for readability/interaction.
+  - Economy notices now animate in with clearer hierarchy.
+  - Mobile bottom navigation reworked to stateful “pill” behavior (`data-active`) with better touch affordance.
+
+- Main world screen polish in `client/src/components/game/LocationScreen.tsx`:
+  - Improved contrast and consistency for location chip, description card, loot/economy tags.
+  - Refined map shortcut button visual prominence and panel depth.
+
+- Map modal polish in `client/src/components/game/WorldMapModal.tsx`:
+  - Improved modal depth and header/surface consistency with the updated visual language.
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit + UI).
+
+### 13.26 Auth + Admin Map Editor
+- Added полноценная auth-flow (клиент + сервер):
+  - `POST /api/auth/register` with username uniqueness and hashed password storage (`scrypt`).
+  - `POST /api/auth/login` with password verification.
+  - Client-side login/registration screen in `client/src/App.tsx`.
+  - Local auth session persisted in `localStorage` via `client/src/lib/telegram.ts` (`getAuthSession`, `setAuthSession`, `clearAuthSession`).
+
+- Added special admin access:
+  - Hardcoded admin credentials on backend:
+    - login: `deenfoool`
+    - password: `12.06.2002ad`
+  - Admin receives `isAdmin: true` in auth session.
+
+- Added in-game admin map editor in `client/src/components/game/WorldMapModal.tsx`:
+  - Admin-only toggle `Редактор/Editor`.
+  - Marker drag-and-drop (mouse/touch pointer) for all map nodes.
+  - Saved coordinates in `localStorage` (`wwc_admin_map_positions_v1`).
+  - Save button (`Сохранить/Save`) and reset-to-default button (`Дефолт/Default`).
+  - During edit mode, travel click is blocked intentionally to avoid accidental teleports.
+
+- Validation:
+  - `npm run check` passed.
+  - `npm test` passed (unit `11/11`, UI `3/3`).
 - Bestiary:
   - client/src/components/game/BestiaryPanel.tsx
 - Audio manifest:

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useGameStore } from '../../game/store';
 import { LOCATIONS, WEATHER, ITEMS, CLASSES, SKILLS } from '../../game/constants';
 import { Progress } from "@/components/ui/progress";
@@ -211,6 +211,9 @@ export default function GameLayout() {
   const { player, gameTime, loadSave, chooseClass, advanceTutorialStep, skipTutorial, markTutorialHintSeen, currentLocationId, currentWeather, status, settings, worldEconomy, startTutorialCombat, stopTutorialCombat } = useGameStore();
   const [activeTab, setActiveTab] = useState('world'); 
   const [desktopTab, setDesktopTab] = useState('character');
+  const [desktopCharacterPanel, setDesktopCharacterPanel] = useState<'character' | 'skills'>('character');
+  const [desktopInventoryPanel, setDesktopInventoryPanel] = useState<'inventory' | 'crafting'>('inventory');
+  const [desktopCodexPanel, setDesktopCodexPanel] = useState<'reputation' | 'bestiary'>('reputation');
   const prevMobileTabRef = useRef<string | null>(null);
   const prevDesktopTabRef = useRef<string | null>(null);
   const [introStep, setIntroStep] = useState(0);
@@ -1210,9 +1213,9 @@ export default function GameLayout() {
   return (
     <div className="h-[100dvh] w-full text-foreground font-sans flex overflow-hidden fixed inset-0" style={bgStyle}>
       {/* Desktop Left Panel (Hidden on mobile) */}
-      <aside className="hidden md:flex w-[400px] bg-card/90 backdrop-blur-xl border-r border-border flex-col shrink-0 h-full z-20 shadow-[4px_0_24px_rgba(0,0,0,0.5)]">
+      <aside className="hidden md:flex w-[400px] glass-panel border-r border-primary/20 flex-col shrink-0 h-full z-20 shadow-[6px_0_26px_rgba(0,0,0,0.56)]">
         {/* Header */}
-        <div className="p-4 border-b border-border bg-black/40 flex justify-between items-center shrink-0">
+        <div className="p-4 border-b border-primary/20 bg-black/35 flex justify-between items-center shrink-0">
           <h1 className="text-2xl font-serif text-primary tracking-widest font-bold uppercase drop-shadow-md">
             Eternal Quest
           </h1>
@@ -1224,25 +1227,37 @@ export default function GameLayout() {
         {/* Tabs */}
         <Tabs value={desktopTab} onValueChange={setDesktopTab} className="flex-1 flex flex-col min-h-0 mt-2">
           <div className="px-4 shrink-0">
-            <TabsList className="grid w-full grid-cols-8 bg-black/50 border border-white/5 h-12">
+            <TabsList className="grid w-full grid-cols-5 bg-black/50 border border-white/5 h-12">
               <TabsTrigger value="character" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><User className="w-4 h-4"/></TabsTrigger>
-              <TabsTrigger value="skills" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><Star className="w-4 h-4"/></TabsTrigger>
               <TabsTrigger value="inventory" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><Backpack className="w-4 h-4"/></TabsTrigger>
               <TabsTrigger value="quests" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><MapIcon className="w-4 h-4"/></TabsTrigger>
-              <TabsTrigger value="reputation" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><Scale className="w-4 h-4"/></TabsTrigger>
-              <TabsTrigger value="crafting" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><Hammer className="w-4 h-4"/></TabsTrigger>
-              <TabsTrigger value="bestiary" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><BookMarked className="w-4 h-4"/></TabsTrigger>
+              <TabsTrigger value="codex" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><BookMarked className="w-4 h-4"/></TabsTrigger>
               <TabsTrigger value="settings" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"><SettingsIcon className="w-4 h-4"/></TabsTrigger>
             </TabsList>
           </div>
           <ScrollArea className="flex-1 mt-2">
-            <TabsContent value="character" className="m-0"><CharacterPanel player={player} l={l} /></TabsContent>
-            <TabsContent value="skills" className="m-0"><SkillsPanel /></TabsContent>
-            <TabsContent value="inventory" className="m-0"><InventoryPanel /></TabsContent>
+            <TabsContent value="character" className="m-0">
+              <div className="px-4 pt-2 pb-1 flex gap-2">
+                <button onClick={() => setDesktopCharacterPanel('character')} className={`px-3 py-1 text-xs rounded border ${desktopCharacterPanel === 'character' ? 'border-primary/50 text-primary bg-primary/15' : 'border-white/10 text-muted-foreground'}`}>{T.nav_character[l]}</button>
+                <button onClick={() => setDesktopCharacterPanel('skills')} className={`px-3 py-1 text-xs rounded border ${desktopCharacterPanel === 'skills' ? 'border-primary/50 text-primary bg-primary/15' : 'border-white/10 text-muted-foreground'}`}>{T.nav_skills[l]}</button>
+              </div>
+              {desktopCharacterPanel === 'character' ? <CharacterPanel player={player} l={l} /> : <SkillsPanel />}
+            </TabsContent>
+            <TabsContent value="inventory" className="m-0">
+              <div className="px-4 pt-2 pb-1 flex gap-2">
+                <button onClick={() => setDesktopInventoryPanel('inventory')} className={`px-3 py-1 text-xs rounded border ${desktopInventoryPanel === 'inventory' ? 'border-primary/50 text-primary bg-primary/15' : 'border-white/10 text-muted-foreground'}`}>{T.nav_inventory[l]}</button>
+                <button onClick={() => setDesktopInventoryPanel('crafting')} className={`px-3 py-1 text-xs rounded border ${desktopInventoryPanel === 'crafting' ? 'border-primary/50 text-primary bg-primary/15' : 'border-white/10 text-muted-foreground'}`}>{T.nav_crafting[l]}</button>
+              </div>
+              {desktopInventoryPanel === 'inventory' ? <InventoryPanel /> : <CraftingPanel />}
+            </TabsContent>
             <TabsContent value="quests" className="m-0"><QuestsPanel /></TabsContent>
-            <TabsContent value="reputation" className="m-0"><FactionJournalPanel /></TabsContent>
-            <TabsContent value="crafting" className="m-0"><CraftingPanel /></TabsContent>
-            <TabsContent value="bestiary" className="m-0"><BestiaryPanel /></TabsContent>
+            <TabsContent value="codex" className="m-0">
+              <div className="px-4 pt-2 pb-1 flex gap-2">
+                <button onClick={() => setDesktopCodexPanel('reputation')} className={`px-3 py-1 text-xs rounded border ${desktopCodexPanel === 'reputation' ? 'border-primary/50 text-primary bg-primary/15' : 'border-white/10 text-muted-foreground'}`}>{l === 'ru' ? 'Репутация' : 'Reputation'}</button>
+                <button onClick={() => setDesktopCodexPanel('bestiary')} className={`px-3 py-1 text-xs rounded border ${desktopCodexPanel === 'bestiary' ? 'border-primary/50 text-primary bg-primary/15' : 'border-white/10 text-muted-foreground'}`}>{l === 'ru' ? 'Бестиарий' : 'Bestiary'}</button>
+              </div>
+              {desktopCodexPanel === 'reputation' ? <FactionJournalPanel /> : <BestiaryPanel />}
+            </TabsContent>
             <TabsContent value="settings" className="m-0"><SettingsPanel /></TabsContent>
           </ScrollArea>
         </Tabs>
@@ -1253,7 +1268,7 @@ export default function GameLayout() {
         <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-black/40 to-black/90 z-0"></div>
         
         {/* Mobile Top Bar */}
-        <div className="md:hidden p-3 border-b border-border bg-black/80 flex justify-between items-center shrink-0 relative z-10 backdrop-blur-xl">
+        <div className="md:hidden p-3 border-b border-primary/20 bg-black/82 flex justify-between items-center shrink-0 relative z-10 backdrop-blur-xl">
            <div className="flex flex-col flex-1 max-w-[60%]">
              <div className="flex items-center gap-2">
                <Heart className="w-3.5 h-3.5 text-destructive shrink-0" />
@@ -1286,8 +1301,8 @@ export default function GameLayout() {
                  data-tutorial-id="open-settings"
                  className={`w-6 h-6 rounded border flex items-center justify-center transition-colors ${
                    activeTab === 'settings'
-                     ? 'bg-primary/20 border-primary/40 text-primary'
-                     : 'bg-black/60 border-white/10 text-muted-foreground'
+                     ? 'bg-primary/20 border-primary/45 text-primary pulse-gold'
+                     : 'bg-black/60 border-white/10 text-muted-foreground hover:text-white'
                  }`}
                  aria-label={l === 'ru' ? 'Открыть настройки' : 'Open settings'}
                >
@@ -1328,7 +1343,7 @@ export default function GameLayout() {
                {economyNotices.map((notice) => (
                  <div
                    key={notice.id}
-                   className={`rounded-lg border backdrop-blur-xl px-3 py-2 shadow-xl ${
+                   className={`rounded-lg border backdrop-blur-xl px-3 py-2 shadow-xl animate-in ${
                      notice.tone === 'good'
                        ? 'border-emerald-500/30 bg-emerald-950/45'
                        : notice.tone === 'bad'
@@ -1373,7 +1388,7 @@ export default function GameLayout() {
         </div>
 
         {/* Mobile Bottom Navigation */}
-        <div className="md:hidden shrink-0 bg-card/95 backdrop-blur-xl border-t border-border grid grid-cols-4 px-1.5 relative z-20 pb-2 pt-1 shadow-[0_-4px_24px_rgba(0,0,0,0.5)] gap-1">
+        <div className="md:hidden shrink-0 mobile-nav-surface grid grid-cols-4 px-1.5 relative z-20 pb-2 pt-1 gap-1">
            <NavBtn tutorialId="nav-world" icon={<Swords className="w-4 h-4"/>} label={T.action_explore[l].split(' ')[0]} isActive={activeTab === 'world'} onClick={() => setActiveTab('world')} />
            <NavBtn tutorialId="nav-character" icon={<User className="w-4 h-4"/>} label={T.nav_character[l]} isActive={activeTab === 'character'} onClick={() => setActiveTab('character')} />
            <NavBtn tutorialId="nav-inventory" icon={<Backpack className="w-4 h-4"/>} label={T.nav_inventory[l]} isActive={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
@@ -1450,15 +1465,16 @@ export default function GameLayout() {
   );
 }
 
-function NavBtn({ icon, label, isActive, onClick, tutorialId }: any) {
+function NavBtn({ icon, label, isActive, onClick, tutorialId }: { icon: ReactNode; label: string; isActive: boolean; onClick: () => void; tutorialId: string }) {
   return (
     <button 
       data-tutorial-id={tutorialId}
+      data-active={isActive ? 'true' : 'false'}
       onClick={onClick} 
-      className={`flex flex-col items-center justify-center py-2 gap-1 transition-all ${isActive ? 'text-primary scale-110' : 'text-muted-foreground hover:text-white'}`}
+      className="mobile-nav-btn"
     >
       {icon}
-      <span className="text-[9px] uppercase tracking-wider font-bold truncate w-full px-1">{label}</span>
+      <span className={`text-[9px] uppercase tracking-wider font-bold truncate w-full px-1 ${isActive ? 'text-primary' : ''}`}>{label}</span>
     </button>
   );
 }
@@ -1470,11 +1486,6 @@ function CharacterPanel({ player, l }: { player: any; l: 'en' | 'ru' }) {
     if (!item) return sum;
     return sum + item.weight * inv.quantity;
   }, 0);
-  const learnedSkills = Object.entries(player.learnedSkills || {})
-    .filter(([, lvl]) => Number(lvl) > 0)
-    .map(([id, lvl]) => ({ id, lvl: Number(lvl), skill: SKILLS[id] }))
-    .filter((entry) => entry.skill)
-    .sort((a, b) => a.skill.name[l].localeCompare(b.skill.name[l]));
   const equippedWeapon = player.equipment.weapon ? ITEMS[player.equipment.weapon] : null;
   const equippedArmor = player.equipment.armor ? ITEMS[player.equipment.armor] : null;
 
@@ -1627,29 +1638,8 @@ function CharacterPanel({ player, l }: { player: any; l: 'en' | 'ru' }) {
         )}
 
         {section === 'skills' && (
-          <div className="space-y-3">
-            <div className="rounded border border-primary/20 bg-black/35 p-3">
-              <h4 className="text-xs uppercase tracking-widest text-primary mb-2">{l === 'ru' ? 'Изученные навыки' : 'Learned Skills'}</h4>
-              {learnedSkills.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic">
-                  {l === 'ru' ? 'Навыки ещё не изучены. Откройте древо и вложите очки.' : 'No skills learned yet. Open the tree and spend points.'}
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {learnedSkills.map((entry) => (
-                    <div key={entry.id} className="rounded border border-white/10 bg-black/35 p-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm text-white font-serif">{entry.skill.name[l]}</p>
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-primary/20 border border-primary/30 text-primary">
-                          Lv {entry.lvl}/{entry.skill.maxLevel}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">{entry.skill.description[l]}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          <div className="rounded border border-primary/20 bg-black/35 p-2">
+            <SkillsPanel />
           </div>
         )}
       </div>

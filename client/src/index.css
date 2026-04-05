@@ -37,6 +37,11 @@
 
 :root {
   --radius: 0.25rem;
+  --fx-glow-gold: 0 0 0 1px hsl(40 60% 55% / 0.22), 0 12px 34px hsl(220 70% 2% / 0.7);
+  --fx-glow-soft: 0 8px 24px hsl(220 70% 2% / 0.45);
+  --fx-panel: linear-gradient(160deg, hsl(224 24% 12% / 0.96), hsl(220 28% 7% / 0.96));
+  --fx-border: 1px solid hsl(40 28% 36% / 0.62);
+  --fx-grid: radial-gradient(circle at 1px 1px, hsl(220 12% 55% / 0.12) 1px, transparent 0);
 }
 
 /* Dark Fantasy Theme - Dark Mode Only */
@@ -80,8 +85,13 @@
   }
   body {
     @apply font-sans antialiased bg-background text-foreground;
-    background-image: var(--game-gradient);
+    background-image:
+      radial-gradient(circle at 20% -20%, hsl(40 55% 45% / 0.12), transparent 36%),
+      radial-gradient(circle at 82% 8%, hsl(210 55% 40% / 0.12), transparent 32%),
+      var(--game-gradient);
     min-height: 100vh;
+    letter-spacing: 0.01em;
+    text-rendering: optimizeLegibility;
   }
   
   h1, h2, h3, h4, h5, h6 {
@@ -91,17 +101,18 @@
 
 /* Custom Scrollbar for RPG feel */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 9px;
 }
 ::-webkit-scrollbar-track {
-  background: hsl(var(--background));
+  background: hsl(var(--background) / 0.8);
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
-  border-radius: 4px;
+  background: linear-gradient(180deg, hsl(var(--primary) / 0.6), hsl(220 18% 32% / 0.7));
+  border-radius: 12px;
+  border: 2px solid hsl(var(--background) / 0.9);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--primary) / 0.5);
+  background: linear-gradient(180deg, hsl(var(--primary) / 0.8), hsl(220 24% 44% / 0.8));
 }
 
 /* Animations */
@@ -115,6 +126,19 @@
   to { transform: translateY(0); opacity: 1; }
 }
 
+@keyframes glow-breathe {
+  0% { box-shadow: 0 0 0 1px hsl(var(--primary) / 0.18), 0 8px 22px hsl(220 40% 2% / 0.35); }
+  50% { box-shadow: 0 0 0 1px hsl(var(--primary) / 0.28), 0 14px 32px hsl(220 40% 2% / 0.5); }
+  100% { box-shadow: 0 0 0 1px hsl(var(--primary) / 0.18), 0 8px 22px hsl(220 40% 2% / 0.35); }
+}
+
+@keyframes shine-sweep {
+  0% { transform: translateX(-120%); opacity: 0; }
+  20% { opacity: 0.8; }
+  70% { opacity: 0.5; }
+  100% { transform: translateX(220%); opacity: 0; }
+}
+
 .animate-in {
   animation: fade-in 0.5s ease-out forwards;
 }
@@ -125,19 +149,89 @@
 
 /* UI Panel styles */
 .rpg-panel {
-  @apply bg-card border border-border rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.5)];
-  background: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(220 15% 10%) 100%);
+  @apply bg-card border border-border rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.5)];
+  background: var(--fx-panel);
+  border: var(--fx-border);
+  box-shadow: var(--fx-glow-soft);
+  backdrop-filter: blur(8px);
 }
 
 .rpg-button {
-  @apply relative overflow-hidden transition-all duration-200 border border-primary/30 hover:border-primary/80 bg-secondary/50 hover:bg-secondary text-primary hover:text-primary-foreground font-serif uppercase tracking-widest text-sm py-2 px-4;
+  @apply relative overflow-hidden transition-all duration-200 border border-primary/35 bg-secondary/55 text-primary font-serif uppercase tracking-[0.16em] text-sm py-2 px-4 rounded-md;
+  background: linear-gradient(140deg, hsl(220 20% 14% / 0.95), hsl(220 18% 10% / 0.95));
+  box-shadow: inset 0 0 0 1px hsl(40 18% 36% / 0.28), 0 4px 14px hsl(220 40% 2% / 0.35);
+}
+
+.rpg-button:hover {
+  @apply border-primary/80 text-primary-foreground;
+  background: linear-gradient(140deg, hsl(40 46% 42% / 0.95), hsl(35 58% 38% / 0.95));
+  transform: translateY(-1px);
+  box-shadow: var(--fx-glow-gold);
 }
 
 .rpg-button:active {
   @apply transform scale-[0.98];
+  filter: brightness(0.96);
+}
+
+.rpg-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent, hsl(0 0% 100% / 0.22), transparent);
+  transform: translateX(-160%);
+  pointer-events: none;
+}
+
+.rpg-button:hover::after {
+  animation: shine-sweep 650ms ease-out forwards;
 }
 
 /* Interactive elements */
 .interactive-item {
   @apply transition-colors hover:bg-white/5 cursor-pointer;
+}
+
+.mobile-nav-surface {
+  background: linear-gradient(180deg, hsl(222 24% 12% / 0.95), hsl(220 24% 8% / 0.98));
+  border-top: 1px solid hsl(40 24% 30% / 0.42);
+  box-shadow: 0 -10px 28px hsl(220 70% 2% / 0.62);
+}
+
+.mobile-nav-btn {
+  @apply relative flex flex-col items-center justify-center py-2 gap-1 rounded-lg transition-all duration-200;
+}
+
+.mobile-nav-btn[data-active="true"] {
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.14);
+  box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.35);
+  transform: translateY(-1px);
+}
+
+.mobile-nav-btn[data-active="false"] {
+  color: hsl(var(--muted-foreground));
+}
+
+.mobile-nav-btn[data-active="false"]:hover {
+  color: hsl(var(--foreground));
+  background: hsl(220 16% 22% / 0.5);
+}
+
+.glass-panel {
+  background: var(--fx-panel);
+  border: var(--fx-border);
+  box-shadow: var(--fx-glow-soft);
+  backdrop-filter: blur(10px);
+}
+
+.pulse-gold {
+  animation: glow-breathe 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
